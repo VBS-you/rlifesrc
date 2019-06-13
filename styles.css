@@ -1,5 +1,16 @@
-#rlifesrc {
+body {
+    background-color: #f0f0f2;
+    margin: 0;
+    padding: 0;
     font-family: sans-serif;
+}
+
+#rlifesrc {
+    background-color: #fff;
+    border-radius: 1em;
+    margin: 1em auto;
+    padding: 20px;
+    width: 800px;
 }
 
 pre {
@@ -11,25 +22,29 @@ pre {
     overflow: auto;
 }
 
-#buttons, #set_world {
+#settings {
     margin-top: 10px;
     width: 300px;
 }
 
-.control {
-    margin-top: 8px;
+.setting {
+    padding: 4px;
 }
 
-.label {
+.label, #generation {
     display: inline-block;
     margin-right: 0.5em;
     text-align: right;
-    width: 90px;
+    width: 80px;
 }
 
 input, select {
     box-sizing: border-box;
     width: 200px;
+}
+
+#generation {
+    width: auto;
 }
 
 #set_generation {
