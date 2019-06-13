@@ -1,8 +1,11 @@
 body {
-    background-color: #f0f0f2;
-    margin: 0;
-    padding: 0;
+    background-color: #eee;
     font-family: sans-serif;
+}
+
+div {
+    margin-top: 5px;
+    margin-bottom: 5px;
 }
 
 #rlifesrc {
@@ -13,22 +16,29 @@ body {
     padding: 20px;
 }
 
+#subheading {
+    color: #666;
+    font-weight: normal;
+    font-size: 0.5em;
+    margin-left: 1em;
+}
+
 pre {
     background-color: #eee;
     font-family: monospace;
     font-size: 16px;
-    margin-top: 8px;
+    margin: 5px;
     max-height: 300px;
     overflow: auto;
+    padding: 5px;
 }
 
 #settings {
-    margin-top: 10px;
     width: 300px;
 }
 
-.setting {
-    padding: 4px;
+button {
+    margin-right: 10px;
 }
 
 .label, #generation {
