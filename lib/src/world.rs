@@ -1,10 +1,9 @@
 //! The world.
 
 use crate::{
-    cells::{Alive, CellRef, Dead, LifeCell, State},
+    cells::{Alive, CellRef, Dead, LifeCell, Reason, State},
     config::{Config, NewState, SearchOrder, Symmetry, Transform},
     rules::Rule,
-    search::{Reason, SetCell},
 };
 
 /// The coordinates of a cell.
@@ -50,7 +49,7 @@ pub struct World<'a, R: Rule> {
     /// The cells in this table always have known states.
     ///
     /// It is used in the backtracking.
-    pub(crate) set_stack: Vec<SetCell<'a, R>>,
+    pub(crate) set_stack: Vec<CellRef<'a, R>>,
 
     /// The position in the `set_stack` of the next cell to be examined.
     ///
@@ -211,9 +210,10 @@ impl<'a, R: Rule> World<'a, R> {
                             && x < self.width
                             && 0 <= y
                             && y < self.height
-                            && !self.set_stack.iter().any(|s| s.cell == cell)
+                            && cell.reason.get().is_none()
                         {
-                            self.set_stack.push(SetCell::new(cell, Reason::Deduce));
+                            cell.reason.set(Some(Reason::Init));
+                            self.set_stack.push(cell);
                         }
                     }
 
@@ -302,9 +302,10 @@ impl<'a, R: Rule> World<'a, R> {
                             && x < self.width
                             && 0 <= y
                             && y < self.height
-                            && !self.set_stack.iter().any(|s| s.cell == cell)
+                            && cell.reason.get().is_none()
                         {
-                            self.set_stack.push(SetCell::new(cell, Reason::Deduce));
+                            cell.reason.set(Some(Reason::Init));
+                            self.set_stack.push(cell);
                         }
                     }
                 }
@@ -319,7 +320,7 @@ impl<'a, R: Rule> World<'a, R> {
             for y in 0..self.height {
                 for t in 0..self.period {
                     let cell = self.find_cell((x, y, t)).unwrap();
-                    if !self.set_stack.iter().any(|s| s.cell == cell) {
+                    if cell.reason.get().is_none() {
                         self.clear_cell(cell);
                     }
                 }
@@ -383,7 +384,7 @@ impl<'a, R: Rule> World<'a, R> {
 
     /// Sets the `state` of a cell, push it to the `set_stack`,
     /// and update the neighborhood descriptor of its neighbors.
-    pub(crate) fn set_cell(&mut self, cell: CellRef<'a, R>, state: State, reason: Reason) {
+    pub(crate) fn set_cell(&mut self, cell: CellRef<'a, R>, state: State, reason: Reason<'a, R>) {
         let old_state = cell.state.replace(Some(state));
         if old_state != Some(state) {
             cell.update_desc(old_state, Some(state));
@@ -404,12 +405,13 @@ impl<'a, R: Rule> World<'a, R> {
                 }
             }
         }
-        self.set_stack.push(SetCell::new(cell, reason));
+        cell.reason.set(Some(reason));
+        self.set_stack.push(cell);
     }
 
     /// Clears the `state` of a cell,
     /// and update the neighborhood descriptor of its neighbors.
-    pub(crate) fn clear_cell(&mut self, cell: CellRef<'a, R>) {
+    pub(crate) fn clear_cell(&mut self, cell: CellRef<'a, R>) -> Option<Reason<'a, R>> {
         let old_state = cell.state.take();
         if old_state != None {
             cell.update_desc(old_state, None);
@@ -420,6 +422,7 @@ impl<'a, R: Rule> World<'a, R> {
                 self.front_cell_count += 1;
             }
         }
+        cell.reason.take()
     }
 
     /// Displays the whole world in some generation.

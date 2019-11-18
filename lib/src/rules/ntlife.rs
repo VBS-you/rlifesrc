@@ -1,9 +1,8 @@
 //! Non-totalistic life-like rules.
 
 use crate::{
-    cells::{Alive, CellRef, Dead, State},
+    cells::{Alive, CellRef, Dead, Reason, State},
     rules::Rule,
-    search::Reason,
     world::World,
 };
 use bitflags::bitflags;
@@ -266,11 +265,14 @@ impl Rule for NtLife {
         cell.desc.set(desc);
     }
 
-    fn consistify<'a>(world: &mut World<'a, Self>, cell: CellRef<'a, Self>) -> bool {
+    fn consistify<'a>(
+        world: &mut World<'a, Self>,
+        cell: CellRef<'a, Self>,
+    ) -> Result<(), Reason<'a, Self>> {
         let flags = world.rule.impl_table[cell.desc.get().0];
 
         if flags.contains(ImplFlags::CONFLICT) {
-            return false;
+            return Err(Reason::Rule(cell, cell.desc.get()));
         }
 
         if flags.intersects(ImplFlags::SUCC_DEAD | ImplFlags::SUCC_ALIVE) {
@@ -280,8 +282,8 @@ impl Rule for NtLife {
                 Alive
             };
             let succ = cell.succ.unwrap();
-            world.set_cell(succ, state, Reason::Deduce);
-            return true;
+            world.set_cell(succ, state, Reason::Rule(cell, cell.desc.get()));
+            return Ok(());
         }
 
         if flags.intersects(ImplFlags::SELF_DEAD | ImplFlags::SELF_ALIVE) {
@@ -290,7 +292,7 @@ impl Rule for NtLife {
             } else {
                 Alive
             };
-            world.set_cell(cell, state, Reason::Deduce);
+            world.set_cell(cell, state, Reason::Rule(cell, cell.desc.get()));
         }
 
         if flags.intersects(ImplFlags::NBHD) {
@@ -303,13 +305,13 @@ impl Rule for NtLife {
                             } else {
                                 Alive
                             };
-                        world.set_cell(neigh, state, Reason::Deduce);
+                        world.set_cell(neigh, state, Reason::Rule(cell, cell.desc.get()));
                     }
                 }
             }
         }
 
-        true
+        Ok(())
     }
 }
 

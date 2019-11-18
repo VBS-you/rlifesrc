@@ -2,7 +2,8 @@
 
 use crate::{
     cells::State,
-    rules::{Life, NtLife},
+    // rules::{Life, NtLife},
+    rules::NtLife,
     search::Search,
     world::World,
 };
@@ -441,12 +442,12 @@ impl Config {
     /// the first generation, applying the transformation first,
     /// and then the translation defined by `dx` and `dy`.
     pub fn set_world(&self) -> Result<Box<dyn Search>, String> {
-        if let Ok(rule) = Life::parse_rule(&self.rule_string) {
-            Ok(Box::new(World::new(&self, rule)))
-        } else {
-            let rule = NtLife::parse_rule(&self.rule_string)?;
-            Ok(Box::new(World::new(&self, rule)))
-        }
+        // if let Ok(rule) = Life::parse_rule(&self.rule_string) {
+        //     Ok(Box::new(World::new(&self, rule)))
+        // } else {
+        let rule = NtLife::parse_rule(&self.rule_string)?;
+        Ok(Box::new(World::new(&self, rule)))
+        // }
     }
 }
 

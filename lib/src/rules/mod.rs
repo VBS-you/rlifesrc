@@ -3,14 +3,14 @@
 //! For the notations of rule strings, please see
 //! [this article on LifeWiki](https://www.conwaylife.com/wiki/Rulestring).
 
-mod life;
+// mod life;
 mod ntlife;
 
 use crate::{
-    cells::{CellRef, State},
+    cells::{CellRef, Reason, State},
     world::World,
 };
-pub use life::Life;
+// pub use life::Life;
 pub use ntlife::NtLife;
 
 /// A cellular automaton rule.
@@ -19,7 +19,7 @@ pub trait Rule: Sized {
     ///
     /// It describes the states of the successor and neighbors of a cell,
     /// and is used to determine the state of the cell in the next generation.
-    type Desc: Copy;
+    type Desc: Copy + PartialEq;
 
     /// Whether the rule contains `B0`.
     ///
@@ -44,5 +44,8 @@ pub trait Rule: Sized {
     ///
     /// Returns `false` if there is a conflict,
     /// `true` if the cells are consistent.
-    fn consistify<'a>(world: &mut World<'a, Self>, cell: CellRef<'a, Self>) -> bool;
+    fn consistify<'a>(
+        world: &mut World<'a, Self>,
+        cell: CellRef<'a, Self>,
+    ) -> Result<(), Reason<'a, Self>>;
 }

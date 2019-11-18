@@ -1,7 +1,7 @@
 //! The search process.
 
 use crate::{
-    cells::{CellRef, State},
+    cells::{CellRef, Reason, State},
     config::NewState,
     rules::Rule,
     world::World,
@@ -24,34 +24,6 @@ pub enum Status {
     Paused,
 }
 
-/// Reasons for setting a cell.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Reason {
-    /// Decides the state of a cell by choice,
-    /// and remembers its position in the `search_list` of the world.
-    Decide(usize),
-
-    /// Determines the state of a cell by other cells.
-    Deduce,
-}
-
-/// Records the cells whose values are set and their reasons.
-#[derive(Clone, Copy)]
-pub(crate) struct SetCell<'a, R: Rule> {
-    /// The set cell.
-    pub(crate) cell: CellRef<'a, R>,
-
-    /// The reason for setting a cell.
-    pub(crate) reason: Reason,
-}
-
-impl<'a, R: Rule> SetCell<'a, R> {
-    /// Get a reference to the set cell.
-    pub(crate) fn new(cell: CellRef<'a, R>, reason: Reason) -> Self {
-        SetCell { cell, reason }
-    }
-}
-
 impl<'a, R: Rule> World<'a, R> {
     /// Consistifies a cell.
     ///
@@ -60,71 +32,62 @@ impl<'a, R: Rule> World<'a, R> {
     /// generation. If possible, determines the states of some of the
     /// cells involved.
     ///
-    /// Returns `false` if there is a conflict,
-    /// `true` if the cells are consistent.
-    fn consistify(&mut self, cell: CellRef<'a, R>) -> bool {
+    /// If there is a conflict, returns its reason.
+    fn consistify(&mut self, cell: CellRef<'a, R>) -> Result<(), Reason<'a, R>> {
         Rule::consistify(self, cell)
     }
 
     /// Consistifies a cell, its neighbors, and its predecessor.
     ///
-    /// Returns `false` if there is a conflict,
-    /// `true` if the cells are consistent.
-    fn consistify10(&mut self, cell: CellRef<'a, R>) -> bool {
-        self.consistify(cell)
-            && {
-                if let Some(pred) = cell.pred {
-                    self.consistify(pred)
-                } else {
-                    true
-                }
-            }
-            && cell
-                .nbhd
-                .iter()
-                .all(|&neigh| self.consistify(neigh.unwrap()))
+    /// If there is a conflict, returns its reason.
+    fn consistify10(&mut self, cell: CellRef<'a, R>) -> Result<(), Reason<'a, R>> {
+        self.consistify(cell)?;
+        if let Some(pred) = cell.pred {
+            self.consistify(pred)?;
+        }
+        for &neigh in cell.nbhd.iter() {
+            self.consistify(neigh.unwrap())?;
+        }
+        Ok(())
     }
 
     /// Deduces all the consequences by `consistify` and symmetry.
     ///
-    /// Returns `false` if there is a conflict,
-    /// `true` if the cells are consistent.
-    fn proceed(&mut self) -> bool {
+    /// If there is a conflict, returns its reason.
+    fn proceed(&mut self) -> Result<(), Reason<'a, R>> {
         while self.check_index < self.set_stack.len() {
             // Tests if the number of living cells exceeds the `max_cell_count`.
             if let Some(max) = self.max_cell_count {
                 if self.gen0_cell_count > max {
-                    return false;
+                    return Err(Reason::Conflict);
                 }
             }
 
             // Tests if the first row / column is empty.
             if self.non_empty_front && self.front_cell_count == 0 {
-                return false;
+                return Err(Reason::Conflict);
             }
 
-            let cell = self.set_stack[self.check_index].cell;
+            let cell = self.set_stack[self.check_index];
             let state = cell.state.get().unwrap();
 
             // Determines some cells by symmetry.
             for &sym in cell.sym.iter() {
                 if let Some(old_state) = sym.state.get() {
                     if state != old_state {
-                        return false;
+                        return Err(Reason::Sym(cell));
                     }
                 } else {
-                    self.set_cell(sym, state, Reason::Deduce);
+                    self.set_cell(sym, state, Reason::Sym(cell));
                 }
             }
 
             // Determines some cells by `consistify`.
-            if !self.consistify10(cell) {
-                return false;
-            }
+            self.consistify10(cell)?;
 
             self.check_index += 1;
         }
-        true
+        Ok(())
     }
 
     /// Backtracks to the last time when a unknown cell is decided by choice,
@@ -133,17 +96,43 @@ impl<'a, R: Rule> World<'a, R> {
     /// Returns `true` if it backtracks successfully,
     /// `false` if it goes back to the time before the first cell is set.
     fn backup(&mut self) -> bool {
-        while let Some(set_cell) = self.set_stack.pop() {
-            let cell = set_cell.cell;
-            match set_cell.reason {
-                Reason::Decide(i) => {
+        while let Some(cell) = self.set_stack.pop() {
+            match cell.reason.get() {
+                Some(Reason::Decide(i)) => {
                     self.check_index = self.set_stack.len();
                     self.search_index = i + 1;
                     let state = !cell.state.get().unwrap();
-                    self.set_cell(cell, state, Reason::Deduce);
+                    self.set_cell(cell, state, Reason::Conflict);
                     return true;
                 }
-                Reason::Deduce => {
+                None => unreachable!(),
+                _ => {
+                    self.clear_cell(cell);
+                }
+            }
+        }
+        self.check_index = 0;
+        self.search_index = 0;
+        false
+    }
+
+    /// Backtracks to the last time when a unknown cell is decided by choice,
+    /// and switch that cell to the other state.
+    ///
+    /// Returns `true` if it backtracks successfully,
+    /// `false` if it goes back to the time before the first cell is set.
+    fn backup_with_reason(&mut self, _reason: Reason<'a, R>) -> bool {
+        while let Some(cell) = self.set_stack.pop() {
+            match cell.reason.get() {
+                Some(Reason::Decide(i)) => {
+                    self.check_index = self.set_stack.len();
+                    self.search_index = i + 1;
+                    let state = !cell.state.get().unwrap();
+                    self.set_cell(cell, state, Reason::Conflict);
+                    return true;
+                }
+                None => unreachable!(),
+                _ => {
                     self.clear_cell(cell);
                 }
             }
@@ -163,10 +152,13 @@ impl<'a, R: Rule> World<'a, R> {
     fn go(&mut self, step: &mut u32) -> bool {
         loop {
             *step += 1;
-            if self.proceed() {
-                return true;
-            } else if !self.backup() {
-                return false;
+            match self.proceed() {
+                Ok(()) => return true,
+                Err(reason) => {
+                    if !self.backup_with_reason(reason) {
+                        return false;
+                    }
+                }
             }
         }
     }
