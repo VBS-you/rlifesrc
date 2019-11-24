@@ -2,6 +2,7 @@
 
 use crate::{
     cells::{Alive, CellRef, Dead, LifeCell, Reason, State},
+    clause::Clause,
     config::{Config, NewState, SearchOrder, Symmetry, Transform},
     rules::Rule,
 };
@@ -70,6 +71,12 @@ pub struct World<'a, R: Rule> {
     /// Here 'front' means the first row or column to search,
     /// according to the search order.
     pub(crate) non_empty_front: bool,
+
+    /// The global decision level for assigning the cell state.
+    pub(crate) level: usize,
+
+    /// Learnt clauses
+    pub(crate) learnts: Vec<Clause<'a, R>>,
 }
 
 impl<'a, R: Rule> World<'a, R> {
@@ -131,6 +138,8 @@ impl<'a, R: Rule> World<'a, R> {
             search_index: 0,
             max_cell_count: config.max_cell_count,
             non_empty_front: config.non_empty_front,
+            level: 0,
+            learnts: Vec::new(),
         }
         .init_nbhd()
         .init_pred_succ(config.dx, config.dy, config.transform)
@@ -406,6 +415,10 @@ impl<'a, R: Rule> World<'a, R> {
             }
         }
         cell.reason.set(Some(reason));
+        if let Reason::Assign(_) = reason {
+            self.level += 1;
+        }
+        cell.level.set(Some(self.level));
         self.set_stack.push(cell);
     }
 
@@ -421,6 +434,9 @@ impl<'a, R: Rule> World<'a, R> {
             if cell.is_front && old_state == Some(Dead) {
                 self.front_cell_count += 1;
             }
+        }
+        if let Some(Reason::Assign(_)) = cell.reason.get() {
+            self.level -= 1;
         }
         cell.reason.take()
     }

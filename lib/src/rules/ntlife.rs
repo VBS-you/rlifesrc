@@ -272,7 +272,7 @@ impl Rule for NtLife {
         let flags = world.rule.impl_table[cell.desc.get().0];
 
         if flags.contains(ImplFlags::CONFLICT) {
-            return Err(Reason::Rule(cell, cell.desc.get()));
+            return Err(Reason::Rule(cell));
         }
 
         if flags.intersects(ImplFlags::SUCC_DEAD | ImplFlags::SUCC_ALIVE) {
@@ -282,7 +282,7 @@ impl Rule for NtLife {
                 Alive
             };
             let succ = cell.succ.unwrap();
-            world.set_cell(succ, state, Reason::Rule(cell, cell.desc.get()));
+            world.set_cell(succ, state, Reason::Rule(cell));
             return Ok(());
         }
 
@@ -292,7 +292,7 @@ impl Rule for NtLife {
             } else {
                 Alive
             };
-            world.set_cell(cell, state, Reason::Rule(cell, cell.desc.get()));
+            world.set_cell(cell, state, Reason::Rule(cell));
         }
 
         if flags.intersects(ImplFlags::NBHD) {
@@ -305,7 +305,7 @@ impl Rule for NtLife {
                             } else {
                                 Alive
                             };
-                        world.set_cell(neigh, state, Reason::Rule(cell, cell.desc.get()));
+                        world.set_cell(neigh, state, Reason::Rule(cell));
                     }
                 }
             }

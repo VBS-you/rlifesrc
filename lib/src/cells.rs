@@ -28,7 +28,7 @@ pub enum State {
 
 /// Flips the state.
 impl Not for State {
-    type Output = State;
+    type Output = Self;
 
     fn not(self) -> Self::Output {
         match self {
@@ -96,6 +96,9 @@ pub struct LifeCell<'a, R: Rule> {
 
     /// Reason for setting the state of the cell.
     pub(crate) reason: Cell<Option<Reason<'a, R>>>,
+
+    /// The decision level for assigning the cell state.
+    pub(crate) level: Cell<Option<usize>>,
 }
 
 impl<'a, R: Rule> LifeCell<'a, R> {
@@ -116,6 +119,7 @@ impl<'a, R: Rule> LifeCell<'a, R> {
             is_gen0: false,
             is_front: false,
             reason: Cell::new(None),
+            level: Cell::new(None),
         }
     }
 
@@ -178,16 +182,16 @@ impl<'a, R: Rule<Desc = D>, D: Copy + PartialEq + Debug> Debug for CellRef<'a, R
 
 /// Reasons for setting a cell.
 pub enum Reason<'a, R: Rule> {
-    /// Decided by choice.
+    /// Assigned when nothing can be deduced.
     ///
     /// The number is its position in the `search_list` of the world.
-    Decide(usize),
+    Assign(usize),
 
     /// Deduced during the initialization.
     Init,
 
     /// Deduced from the rule when constitifying another cell.
-    Rule(CellRef<'a, R>, R::Desc),
+    Rule(CellRef<'a, R>),
 
     /// Deduced from symmetry.
     Sym(CellRef<'a, R>),
@@ -199,9 +203,9 @@ pub enum Reason<'a, R: Rule> {
 impl<'a, R: Rule> Clone for Reason<'a, R> {
     fn clone(&self) -> Self {
         match self {
-            &Reason::Decide(i) => Reason::Decide(i),
+            &Reason::Assign(i) => Reason::Assign(i),
             &Reason::Init => Reason::Init,
-            &Reason::Rule(cell, desc) => Reason::Rule(cell, desc),
+            &Reason::Rule(cell) => Reason::Rule(cell),
             &Reason::Sym(cell) => Reason::Sym(cell),
             &Reason::Conflict => Reason::Conflict,
         }
@@ -213,11 +217,9 @@ impl<'a, R: Rule> Copy for Reason<'a, R> {}
 impl<'a, R: Rule> PartialEq for Reason<'a, R> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Reason::Decide(i), Reason::Decide(j)) => i == j,
+            (Reason::Assign(i), Reason::Assign(j)) => i == j,
             (Reason::Init, Reason::Init) => true,
-            (Reason::Rule(cell0, desc0), Reason::Rule(cell1, desc1)) => {
-                cell0 == cell1 && desc0 == desc1
-            }
+            (Reason::Rule(cell0), Reason::Rule(cell1)) => cell0 == cell1,
             (Reason::Sym(cell0), Reason::Sym(cell1)) => cell0 == cell1,
             (Reason::Conflict, Reason::Conflict) => true,
             _ => false,

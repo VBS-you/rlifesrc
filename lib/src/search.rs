@@ -2,6 +2,7 @@
 
 use crate::{
     cells::{CellRef, Reason, State},
+    clause::Clause,
     config::NewState,
     rules::Rule,
     world::World,
@@ -95,10 +96,10 @@ impl<'a, R: Rule> World<'a, R> {
     ///
     /// Returns `true` if it backtracks successfully,
     /// `false` if it goes back to the time before the first cell is set.
-    fn backup(&mut self) -> bool {
+    fn backup_without_analysis(&mut self) -> bool {
         while let Some(cell) = self.set_stack.pop() {
             match cell.reason.get() {
-                Some(Reason::Decide(i)) => {
+                Some(Reason::Assign(i)) => {
                     self.check_index = self.set_stack.len();
                     self.search_index = i + 1;
                     let state = !cell.state.get().unwrap();
@@ -117,29 +118,54 @@ impl<'a, R: Rule> World<'a, R> {
     }
 
     /// Backtracks to the last time when a unknown cell is decided by choice,
-    /// and switch that cell to the other state.
+    /// switch that cell to the other state, and learns a clause from the
+    /// conflict.
     ///
     /// Returns `true` if it backtracks successfully,
     /// `false` if it goes back to the time before the first cell is set.
-    fn backup_with_reason(&mut self, _reason: Reason<'a, R>) -> bool {
-        while let Some(cell) = self.set_stack.pop() {
-            match cell.reason.get() {
-                Some(Reason::Decide(i)) => {
+    fn backup_with_reason(&mut self, reason: Reason<'a, R>) -> bool {
+        let mut reason_clause = reason.to_lits(None);
+        let mut seen = Vec::new();
+        let mut learnt = Vec::new();
+        let mut counter = 0;
+        loop {
+            for &lit in reason_clause.iter() {
+                if !seen.contains(&lit.cell) {
+                    seen.push(lit.cell);
+                    let level = lit.cell.level.get();
+                    if level == Some(self.level) {
+                        counter += 1;
+                    } else if level.is_some() && level.unwrap() > 0 {
+                        learnt.push(!lit);
+                    }
+                }
+            }
+            if let Some(cell) = self.set_stack.pop() {
+                let reason = cell.reason.get().unwrap();
+                if let Reason::Assign(i) = reason {
                     self.check_index = self.set_stack.len();
                     self.search_index = i + 1;
                     let state = !cell.state.get().unwrap();
                     self.set_cell(cell, state, Reason::Conflict);
                     return true;
-                }
-                None => unreachable!(),
-                _ => {
+                } else if seen.contains(&cell) {
+                    reason_clause = reason.to_lits(Some(cell));
+                    self.clear_cell(cell);
+                    counter -= 1;
+                } else {
+                    reason_clause.clear();
                     self.clear_cell(cell);
                 }
+            } else {
+                self.check_index = 0;
+                self.search_index = 0;
+                return false;
+            }
+            if counter == 0 {
+                self.learnts.push(Clause { lits: learnt });
+                return self.backup_without_analysis();
             }
         }
-        self.check_index = 0;
-        self.search_index = 0;
-        false
     }
 
     /// Keeps proceeding and backtracking,
@@ -177,7 +203,7 @@ impl<'a, R: Rule> World<'a, R> {
                 NewState::Choose(State::Alive) => !cell.background,
                 NewState::Random => rand::random(),
             };
-            self.set_cell(cell, state, Reason::Decide(i));
+            self.set_cell(cell, state, Reason::Assign(i));
             true
         } else {
             false
@@ -192,14 +218,14 @@ impl<'a, R: Rule> World<'a, R> {
     /// and no results are found.
     pub fn search(&mut self, max_step: Option<u32>) -> Status {
         let mut step_count = 0;
-        if self.get_unknown(0).is_none() && !self.backup() {
+        if self.get_unknown(0).is_none() && !self.backup_without_analysis() {
             return Status::None;
         }
         while self.go(&mut step_count) {
             if !self.decide() {
                 if self.nontrivial() {
                     return Status::Found;
-                } else if !self.backup() {
+                } else if !self.backup_without_analysis() {
                     return Status::None;
                 }
             }
