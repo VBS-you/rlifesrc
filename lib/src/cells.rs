@@ -202,12 +202,12 @@ pub enum Reason<'a, R: Rule> {
 
 impl<'a, R: Rule> Clone for Reason<'a, R> {
     fn clone(&self) -> Self {
-        match self {
-            &Reason::Assign(i) => Reason::Assign(i),
-            &Reason::Init => Reason::Init,
-            &Reason::Rule(cell) => Reason::Rule(cell),
-            &Reason::Sym(cell) => Reason::Sym(cell),
-            &Reason::Conflict => Reason::Conflict,
+        match *self {
+            Reason::Assign(i) => Reason::Assign(i),
+            Reason::Init => Reason::Init,
+            Reason::Rule(cell) => Reason::Rule(cell),
+            Reason::Sym(cell) => Reason::Sym(cell),
+            Reason::Conflict => Reason::Conflict,
         }
     }
 }
