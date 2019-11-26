@@ -182,10 +182,10 @@ impl<'a, R: Rule<Desc = D>, D: Copy + PartialEq + Debug> Debug for CellRef<'a, R
 
 /// Reasons for setting a cell.
 pub enum Reason<'a, R: Rule> {
-    /// Assigned when nothing can be deduced.
+    /// Assumed when nothing can be deduced.
     ///
     /// The number is its position in the `search_list` of the world.
-    Assign(usize),
+    Assume(usize),
 
     /// Deduced during the initialization.
     Init,
@@ -203,7 +203,7 @@ pub enum Reason<'a, R: Rule> {
 impl<'a, R: Rule> Clone for Reason<'a, R> {
     fn clone(&self) -> Self {
         match *self {
-            Reason::Assign(i) => Reason::Assign(i),
+            Reason::Assume(i) => Reason::Assume(i),
             Reason::Init => Reason::Init,
             Reason::Rule(cell) => Reason::Rule(cell),
             Reason::Sym(cell) => Reason::Sym(cell),
@@ -217,7 +217,7 @@ impl<'a, R: Rule> Copy for Reason<'a, R> {}
 impl<'a, R: Rule> PartialEq for Reason<'a, R> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Reason::Assign(i), Reason::Assign(j)) => i == j,
+            (Reason::Assume(i), Reason::Assume(j)) => i == j,
             (Reason::Init, Reason::Init) => true,
             (Reason::Rule(cell0), Reason::Rule(cell1)) => cell0 == cell1,
             (Reason::Sym(cell0), Reason::Sym(cell1)) => cell0 == cell1,
