@@ -148,9 +148,9 @@ pub fn parse_args() -> Option<Args> {
         )
         .arg(
             Arg::with_name("MAX")
-                .help("Maximal number of living cells in the first generation")
+                .help("Upper bound of numbers of minimum living cells in all generations")
                 .long_help(
-                    "Maximal number of living cells in the first generation\n\
+                    "Upper bound of numbers of minimum living cells in all generations\n\
                      If this value is set to 0, it means there is no limitation.\n",
                 )
                 .short("m")
@@ -164,6 +164,16 @@ pub fn parse_args() -> Option<Args> {
                 .help("Force the first row or column to be nonempty")
                 .short("f")
                 .long("front"),
+        )
+        .arg(
+            Arg::with_name("REDUCE")
+                .help("Reduce the max cell count when a result is found")
+                .long_help(
+                    "Reduce the max cell count when a result is found\n\
+                     Here 'front' means the first row or column to search, \
+                     according to the search order.",
+                )
+                .long("reduce"),
         )
         .arg(
             Arg::with_name("ALL")
@@ -244,6 +254,7 @@ pub fn parse_args() -> Option<Args> {
         i => Some(i),
     };
     let non_empty_front = matches.is_present("FRONT");
+    let reduce_max = matches.is_present("REDUCE");
 
     let rule_string = matches.value_of("RULE").unwrap().to_string();
 
@@ -255,6 +266,7 @@ pub fn parse_args() -> Option<Args> {
         .set_new_state(new_state)
         .set_max_cell_count(max_cell_count)
         .set_non_empty_front(non_empty_front)
+        .set_reduce_max(reduce_max)
         .set_rule_string(rule_string);
 
     let search = config.set_world().ok()?;

@@ -204,7 +204,7 @@ impl<'a, R: Rule> World<'a, R> {
     ///
     /// The difference between `step` and `self.steps` is that the former
     /// will be resetted in each `search`.
-    fn go(&mut self, step: &mut usize) -> bool {
+    fn go(&mut self, step: &mut u64) -> bool {
         loop {
             *step += 1;
             match self.proceed() {
@@ -246,7 +246,7 @@ impl<'a, R: Rule> World<'a, R> {
     /// `None` if such pattern does not exist,
     /// `Searching` if the number of steps exceeds `max_step`
     /// and no results are found.
-    pub fn search(&mut self, max_step: Option<usize>) -> Status {
+    pub fn search(&mut self, max_step: Option<u64>) -> Status {
         let mut step_count = 0;
         if self.get_unknown(0).is_none() && !self.backup() {
             return Status::None;
@@ -257,6 +257,10 @@ impl<'a, R: Rule> World<'a, R> {
                     return Status::None;
                 }
             } else if self.nontrivial() {
+                if self.reduce_max {
+                    let cell_count = *self.cell_count.iter().min().unwrap();
+                    self.max_cell_count = Some(cell_count - 1);
+                }
                 return Status::Found;
             } else if !self.backup() {
                 return Status::None;
@@ -282,7 +286,7 @@ pub trait Search {
     /// `None` if such pattern does not exist,
     /// `Searching` if the number of steps exceeds `max_step`
     /// and no results are found.
-    fn search(&mut self, max_step: Option<usize>) -> Status;
+    fn search(&mut self, max_step: Option<u64>) -> Status;
 
     /// Displays the whole world in some generation.
     ///
@@ -295,10 +299,10 @@ pub trait Search {
     fn period(&self) -> isize;
 
     /// Number of known living cells in the first generation.
-    fn gen0_cell_count(&self) -> usize;
+    fn cell_count(&self, t: isize) -> usize;
 
     /// Number of conflicts during the search.
-    fn conflicts(&self) -> usize;
+    fn conflicts(&self) -> u64;
 
     /// Set the max cell counts.
     ///
@@ -309,7 +313,7 @@ pub trait Search {
 
 /// The `Search` trait is implemented for every `World`.
 impl<'a, R: Rule> Search for World<'a, R> {
-    fn search(&mut self, max_step: Option<usize>) -> Status {
+    fn search(&mut self, max_step: Option<u64>) -> Status {
         self.search(max_step)
     }
 
@@ -321,18 +325,18 @@ impl<'a, R: Rule> Search for World<'a, R> {
         self.period
     }
 
-    fn gen0_cell_count(&self) -> usize {
-        self.gen0_cell_count
+    fn cell_count(&self, t: isize) -> usize {
+        self.cell_count[t as usize]
     }
 
-    fn conflicts(&self) -> usize {
+    fn conflicts(&self) -> u64 {
         self.conflicts
     }
 
     fn set_max_cell_count(&mut self, max_cell_count: Option<usize>) {
         self.max_cell_count = max_cell_count;
         if let Some(max) = self.max_cell_count {
-            while self.gen0_cell_count > max {
+            while *self.cell_count.iter().min().unwrap() > max {
                 if !self.backup() {
                     break;
                 }

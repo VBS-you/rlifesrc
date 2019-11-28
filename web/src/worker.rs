@@ -7,7 +7,7 @@ use yew::{
     Callback,
 };
 
-const VIEW_FREQ: usize = 50000;
+const VIEW_FREQ: u64 = 50000;
 
 struct Job {
     timeout: TimeoutService,
@@ -68,7 +68,7 @@ pub struct Step;
 impl Worker {
     fn update_world(&mut self, id: HandlerId, gen: isize) {
         let world = self.search.display_gen(gen);
-        let count = self.search.gen0_cell_count();
+        let count = self.search.cell_count(gen);
         self.link
             .response(id, Response::UpdateWorld((world, count)));
         self.update_status(id);
