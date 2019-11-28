@@ -77,8 +77,6 @@ pub struct World<'a, R: Rule> {
 
     /// The global decision level for assigning the cell state.
     pub(crate) level: usize,
-    // /// Learnt clauses
-    // pub(crate) learnts: Vec<Clause<'a, R>>,
 }
 
 impl<'a, R: Rule> World<'a, R> {
@@ -164,7 +162,6 @@ impl<'a, R: Rule> World<'a, R> {
             max_cell_count: config.max_cell_count,
             non_empty_front: config.non_empty_front,
             level: 0,
-            // learnts: Vec::new(),
         }
         .init_nbhd()
         .init_pred_succ(config.dx, config.dy, config.transform)

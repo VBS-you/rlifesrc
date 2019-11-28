@@ -194,7 +194,7 @@ pub enum Reason<'a, R: Rule> {
     Rule(CellRef<'a, R>),
 
     /// Deduced from symmetry.
-    Sym(CellRef<'a, R>),
+    Sym(CellRef<'a, R>, CellRef<'a, R>),
 
     /// Deduced from conflicts.
     Conflict,
@@ -206,7 +206,7 @@ impl<'a, R: Rule> Clone for Reason<'a, R> {
             Reason::Assume(i) => Reason::Assume(i),
             Reason::Init => Reason::Init,
             Reason::Rule(cell) => Reason::Rule(cell),
-            Reason::Sym(cell) => Reason::Sym(cell),
+            Reason::Sym(cell, sym) => Reason::Sym(cell, sym),
             Reason::Conflict => Reason::Conflict,
         }
     }
@@ -220,7 +220,7 @@ impl<'a, R: Rule> PartialEq for Reason<'a, R> {
             (Reason::Assume(i), Reason::Assume(j)) => i == j,
             (Reason::Init, Reason::Init) => true,
             (Reason::Rule(cell0), Reason::Rule(cell1)) => cell0 == cell1,
-            (Reason::Sym(cell0), Reason::Sym(cell1)) => cell0 == cell1,
+            (Reason::Sym(cell0, sym0), Reason::Sym(cell1, sym1)) => cell0 == cell1 && sym0 == sym1,
             (Reason::Conflict, Reason::Conflict) => true,
             _ => false,
         }

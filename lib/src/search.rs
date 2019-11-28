@@ -64,10 +64,10 @@ impl<'a, R: Rule> World<'a, R> {
             for &sym in cell.sym.iter() {
                 if let Some(old_state) = sym.state.get() {
                     if state != old_state {
-                        return Err(Reason::Sym(cell));
+                        return Err(Reason::Sym(cell, sym));
                     }
                 } else {
-                    self.set_cell(sym, state, Reason::Sym(cell))?;
+                    self.set_cell(sym, state, Reason::Sym(cell, sym))?;
                 }
             }
 
@@ -79,22 +79,19 @@ impl<'a, R: Rule> World<'a, R> {
         Ok(())
     }
 
-    /// Backtracks to the last time when a unknown cell is decided by choice,
-    /// and switch that cell to the other state.
+    /// Backtracks to the last time when a unknown cell is assumed,
+    /// and returns this cell and its state.
     ///
-    /// Returns `true` if it backtracks successfully,
-    /// `false` if it goes back to the time before the first cell is set.
-    fn backup(&mut self) -> bool {
+    /// Returns `None` if it goes back to the time before the first cell is set.
+    fn cancel(&mut self) -> Option<(CellRef<'a, R>, State)> {
         while let Some(cell) = self.set_stack.pop() {
             match cell.reason.get() {
                 Some(Reason::Assume(i)) => {
                     self.check_index = self.set_stack.len();
                     self.search_index = i + 1;
-                    let state = !cell.state.get().unwrap();
-                    self.level -= 1;
-                    if self.set_cell(cell, state, Reason::Conflict).is_ok() {
-                        return true;
-                    }
+                    let state = cell.state.get().unwrap();
+                    self.clear_cell(cell);
+                    return Some((cell, state));
                 }
                 None => unreachable!(),
                 _ => {
@@ -104,19 +101,35 @@ impl<'a, R: Rule> World<'a, R> {
         }
         self.check_index = 0;
         self.search_index = 0;
+        None
+    }
+
+    /// Backtracks to the last time when a unknown cell is assumed,
+    /// and switch that cell to the other state.
+    ///
+    /// Returns `false` if it goes back to the time before the first cell is set.
+    fn backup(&mut self) -> bool {
+        while let Some((cell, state)) = self.cancel() {
+            if self.set_cell(cell, !state, Reason::Conflict).is_ok() {
+                return true;
+            }
+        }
         false
     }
 
-    /// Backtracks to the last time when a unknown cell is decided by choice,
+    /// Backtracks to the last time when a unknown cell is assumed,
     /// switch that cell to the other state, and learns a clause from the
     /// conflict.
     ///
     /// Returns `true` if it backtracks successfully,
     /// `false` if it goes back to the time before the first cell is set.
     fn analyze(&mut self, reason: Reason<'a, R>) -> bool {
+        if reason == Reason::Conflict {
+            return self.backup();
+        }
         let mut reason_clause = reason.to_lits(None);
         let mut seen = Vec::new();
-        // let mut learnt = Vec::new();
+        let mut max_level = 0;
         let mut counter = 0;
         loop {
             for &lit in reason_clause.iter() {
@@ -125,8 +138,8 @@ impl<'a, R: Rule> World<'a, R> {
                     let level = lit.cell.level.get();
                     if level == Some(self.level) {
                         counter += 1;
-                        // } else if level.is_some() && level.unwrap() > 0 {
-                        // learnt.push(!lit);
+                    } else if level.is_some() && level.unwrap() > 0 {
+                        max_level = max_level.max(level.unwrap())
                     }
                 }
             }
@@ -136,9 +149,9 @@ impl<'a, R: Rule> World<'a, R> {
                     Reason::Assume(i) => {
                         self.check_index = self.set_stack.len();
                         self.search_index = i + 1;
-                        let state = !cell.state.get().unwrap();
-                        self.level -= 1;
-                        if self.set_cell(cell, state, Reason::Conflict).is_ok() {
+                        let state = cell.state.get().unwrap();
+                        self.clear_cell(cell);
+                        if self.set_cell(cell, !state, Reason::Conflict).is_ok() {
                             return true;
                         } else {
                             return self.backup();
@@ -150,32 +163,17 @@ impl<'a, R: Rule> World<'a, R> {
                     }
                     _ => {
                         if seen.contains(&cell) {
-                            let state = !cell.state.get().unwrap();
+                            let state = cell.state.get().unwrap();
                             self.clear_cell(cell);
                             if counter == 1 {
-                                // self.learnts.push(Clause { lits: learnt });
-                                while let Some(cell0) = self.set_stack.pop() {
-                                    match cell0.reason.get() {
-                                        Some(Reason::Assume(i)) => {
-                                            self.check_index = self.set_stack.len();
-                                            self.search_index = i;
-                                            self.clear_cell(cell0);
-                                            if self.set_cell(cell, state, Reason::Conflict).is_ok()
-                                            {
-                                                return true;
-                                            } else {
-                                                return self.backup();
-                                            }
-                                        }
-                                        None => unreachable!(),
-                                        _ => {
-                                            self.clear_cell(cell0);
-                                        }
-                                    }
+                                while max_level < self.level {
+                                    self.cancel();
                                 }
-                                self.check_index = 0;
-                                self.search_index = 0;
-                                return false;
+                                if self.set_cell(cell, !state, Reason::Conflict).is_ok() {
+                                    return true;
+                                } else {
+                                    return self.backup();
+                                }
                             } else {
                                 reason_clause = reason.to_lits(Some(cell));
                                 if cell.level.get() == Some(self.level) {

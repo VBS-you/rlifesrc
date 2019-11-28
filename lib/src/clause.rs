@@ -65,7 +65,8 @@ impl<'a, R: Rule> Reason<'a, R> {
                     _ => None,
                 })
                 .collect(),
-            Reason::Sym(cell1) => once(&Some(cell1))
+            Reason::Sym(cell1, sym) => once(&Some(cell1))
+                .chain(once(&Some(sym)))
                 .filter_map(|&c| match c {
                     Some(c) if Some(c) != cell => c.state.get().map(|state| Lit { cell: c, state }),
                     _ => None,
