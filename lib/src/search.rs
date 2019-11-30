@@ -47,7 +47,9 @@ impl<'a, R: Rule> World<'a, R> {
             self.consistify(pred)?;
         }
         for &neigh in cell.nbhd.iter() {
-            self.consistify(neigh.unwrap())?;
+            if let Some(neigh) = neigh {
+                self.consistify(neigh)?;
+            }
         }
         Ok(())
     }
@@ -93,13 +95,17 @@ impl<'a, R: Rule> World<'a, R> {
                     self.clear_cell(cell);
                     return Some((cell, state));
                 }
+                Some(SetReason::Init) => {
+                    self.set_stack.push(cell);
+                    break;
+                }
                 None => unreachable!(),
                 _ => {
                     self.clear_cell(cell);
                 }
             }
         }
-        self.check_index = 0;
+        self.check_index = self.set_stack.len();
         self.search_index = 0;
         None
     }
@@ -124,75 +130,77 @@ impl<'a, R: Rule> World<'a, R> {
     /// Returns `true` if it backtracks successfully,
     /// `false` if it goes back to the time before the first cell is set.
     fn analyze(&mut self, reason: ConflReason<'a, R>) -> bool {
-        match reason {
-            ConflReason::Conflict | ConflReason::CellCount | ConflReason::Succeed => self.backup(),
-            _ => {
-                let mut reason_clause = reason.to_lits();
-                let mut seen = Vec::new();
-                let mut max_level = 0;
-                let mut counter = 0;
-                loop {
-                    for &lit in reason_clause.iter() {
-                        if !seen.contains(&lit.cell) {
-                            seen.push(lit.cell);
-                            let level = lit.cell.level.get();
-                            if level == Some(self.level) {
-                                counter += 1;
-                            } else if level.is_some() && level.unwrap() > 0 {
-                                max_level = max_level.max(level.unwrap())
-                            }
+        if let ConflReason::Conflict | ConflReason::CellCount | ConflReason::Succeed = reason {
+            return self.backup();
+        }
+        let mut reason_cells = reason.cells();
+        let mut max_level = 0;
+        let mut counter = 0;
+        loop {
+            for &cell in reason_cells.iter() {
+                let level = cell.level.get();
+                if level == Some(self.level) {
+                    if !cell.seen.get() {
+                        counter += 1;
+                        cell.seen.set(true);
+                    }
+                } else if level.is_some() && level.unwrap() > 0 {
+                    max_level = max_level.max(level.unwrap())
+                }
+            }
+            if let Some(cell) = self.set_stack.pop() {
+                let reason = cell.reason.get().unwrap();
+                match reason {
+                    SetReason::Assume(i) => {
+                        self.check_index = self.set_stack.len();
+                        self.search_index = i + 1;
+                        let state = cell.state.get().unwrap();
+                        self.clear_cell(cell);
+                        if self.set_cell(cell, !state, SetReason::Conflict).is_ok() {
+                            return true;
+                        } else {
+                            return self.backup();
                         }
                     }
-                    if let Some(cell) = self.set_stack.pop() {
-                        let reason = cell.reason.get().unwrap();
-                        match reason {
-                            SetReason::Assume(i) => {
-                                self.check_index = self.set_stack.len();
-                                self.search_index = i + 1;
-                                let state = cell.state.get().unwrap();
-                                self.clear_cell(cell);
+                    SetReason::Conflict => {
+                        self.clear_cell(cell);
+                        return self.backup();
+                    }
+                    SetReason::Init => {
+                        self.set_stack.push(cell);
+                        self.check_index = self.set_stack.len();
+                        self.search_index = 0;
+                        return false;
+                    }
+                    _ => {
+                        if cell.seen.get() {
+                            let state = cell.state.get().unwrap();
+                            self.clear_cell(cell);
+                            if counter == 1 {
+                                while max_level < self.level {
+                                    self.cancel();
+                                }
                                 if self.set_cell(cell, !state, SetReason::Conflict).is_ok() {
                                     return true;
                                 } else {
                                     return self.backup();
                                 }
-                            }
-                            SetReason::Conflict | SetReason::Init => {
-                                self.clear_cell(cell);
-                                return self.backup();
-                            }
-                            _ => {
-                                if seen.contains(&cell) {
-                                    let state = cell.state.get().unwrap();
-                                    self.clear_cell(cell);
-                                    if counter == 1 {
-                                        while max_level < self.level {
-                                            self.cancel();
-                                        }
-                                        if self.set_cell(cell, !state, SetReason::Conflict).is_ok()
-                                        {
-                                            return true;
-                                        } else {
-                                            return self.backup();
-                                        }
-                                    } else {
-                                        reason_clause = reason.to_lits(cell);
-                                        if cell.level.get() == Some(self.level) {
-                                            counter -= 1;
-                                        }
-                                    }
-                                } else {
-                                    reason_clause.clear();
-                                    self.clear_cell(cell);
+                            } else {
+                                reason_cells = reason.cells(cell);
+                                if cell.level.get() == Some(self.level) {
+                                    counter -= 1;
                                 }
                             }
+                        } else {
+                            reason_cells.clear();
+                            self.clear_cell(cell);
                         }
-                    } else {
-                        self.check_index = 0;
-                        self.search_index = 0;
-                        return false;
                     }
                 }
+            } else {
+                self.check_index = self.set_stack.len();
+                self.search_index = 0;
+                return false;
             }
         }
     }

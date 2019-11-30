@@ -9,6 +9,7 @@ use rand::{
 use std::{
     cell::Cell,
     fmt::{Debug, Error, Formatter},
+    iter::once,
     ops::{Deref, Not},
 };
 pub use State::{Alive, Dead};
@@ -100,6 +101,9 @@ pub struct LifeCell<'a, R: Rule> {
 
     /// The decision level for assigning the cell state.
     pub(crate) level: Cell<Option<usize>>,
+
+    /// Whether the cell has been seen in the analysis.
+    pub(crate) seen: Cell<bool>,
 }
 
 impl<'a, R: Rule> LifeCell<'a, R> {
@@ -121,6 +125,7 @@ impl<'a, R: Rule> LifeCell<'a, R> {
             is_front: false,
             reason: Cell::new(None),
             level: Cell::new(None),
+            seen: Cell::new(false),
         }
     }
 
@@ -203,6 +208,23 @@ pub enum SetReason<'a, R: Rule> {
     Conflict,
 }
 
+impl<'a, R: Rule> SetReason<'a, R> {
+    pub(crate) fn cells(self, cell: CellRef<'a, R>) -> Vec<CellRef<'a, R>> {
+        match self {
+            SetReason::Rule(cell0) => cell0
+                .nbhd
+                .iter()
+                .filter_map(|&c| c)
+                .chain(once(cell0))
+                .chain(cell0.succ.into_iter())
+                .filter(|&c| c != cell && c.state.get().is_some())
+                .collect(),
+            SetReason::Sym(sym) => vec![sym],
+            _ => Vec::new(),
+        }
+    }
+}
+
 /// Reasons for a conflict.
 #[derive(Derivative)]
 #[derivative(
@@ -227,4 +249,21 @@ pub enum ConflReason<'a, R: Rule> {
 
     /// Not a conflict, but returning from a succeed.
     Succeed,
+}
+
+impl<'a, R: Rule> ConflReason<'a, R> {
+    pub(crate) fn cells(self) -> Vec<CellRef<'a, R>> {
+        match self {
+            ConflReason::Rule(cell) => cell
+                .nbhd
+                .iter()
+                .filter_map(|&c| c)
+                .chain(once(cell))
+                .chain(cell.succ.into_iter())
+                .filter(|&c| c.state.get().is_some())
+                .collect(),
+            ConflReason::Sym(cell, sym) => vec![cell, sym],
+            _ => Vec::new(),
+        }
+    }
 }

@@ -260,7 +260,6 @@ impl<'a, R: Rule> World<'a, R> {
                             && cell.reason.get().is_none()
                         {
                             cell.reason.set(Some(SetReason::Init));
-                            self.set_stack.push(cell);
                         }
                     }
 
@@ -352,7 +351,6 @@ impl<'a, R: Rule> World<'a, R> {
                             && cell.reason.get().is_none()
                         {
                             cell.reason.set(Some(SetReason::Init));
-                            self.set_stack.push(cell);
                         }
                     }
                 }
@@ -363,12 +361,20 @@ impl<'a, R: Rule> World<'a, R> {
 
     /// Sets states for the cells.
     fn init_state(mut self) -> Self {
-        for x in 0..self.width {
-            for y in 0..self.height {
+        for x in -1..=self.width {
+            for y in -1..=self.height {
                 for t in 0..self.period {
                     let cell = self.find_cell((x, y, t)).unwrap();
-                    if cell.reason.get().is_none() {
+                    if 0 <= x
+                        && x < self.width
+                        && 0 <= y
+                        && y < self.height
+                        && cell.reason.get().is_none()
+                    {
                         self.clear_cell(cell);
+                    } else {
+                        cell.reason.set(Some(SetReason::Init));
+                        self.set_stack.push(cell);
                     }
                 }
             }
@@ -432,6 +438,8 @@ impl<'a, R: Rule> World<'a, R> {
     /// Sets the `state` of a cell, push it to the `set_stack`,
     /// and update the neighborhood descriptor of its neighbors.
     ///
+    /// The original state of the cell must be unknown.
+    ///
     /// Return `false` if the number of living cells exceeds the `max_cell_count`
     /// or the front becomes empty.
     pub(crate) fn set_cell(
@@ -440,35 +448,21 @@ impl<'a, R: Rule> World<'a, R> {
         state: State,
         reason: SetReason<'a, R>,
     ) -> Result<(), ConflReason<'a, R>> {
-        let old_state = cell.state.replace(Some(state));
+        cell.state.set(Some(state));
         let mut result = Ok(());
-        if old_state != Some(state) {
-            cell.update_desc(old_state, Some(state));
-            match (state, old_state) {
-                (Alive, Some(Alive)) => (),
-                (Alive, _) => {
-                    self.cell_count[cell.gen] += 1;
-                    if let Some(max) = self.max_cell_count {
-                        if *self.cell_count.iter().min().unwrap() > max {
-                            result = Err(ConflReason::CellCount);
-                        }
-                    }
+        cell.update_desc(None, Some(state));
+        if let Alive = state {
+            self.cell_count[cell.gen] += 1;
+            if let Some(max) = self.max_cell_count {
+                if *self.cell_count.iter().min().unwrap() > max {
+                    result = Err(ConflReason::CellCount);
                 }
-                (_, Some(Alive)) => self.cell_count[cell.gen] -= 1,
-                _ => (),
             }
-            if cell.is_front {
-                match (state, old_state) {
-                    (Dead, Some(Dead)) => (),
-                    (Dead, _) => {
-                        self.front_cell_count -= 1;
-                        if self.non_empty_front && self.front_cell_count == 0 {
-                            result = Err(ConflReason::CellCount);
-                        }
-                    }
-                    (_, Some(Dead)) => self.front_cell_count += 1,
-                    _ => (),
-                }
+        }
+        if cell.is_front && state == Dead {
+            self.front_cell_count -= 1;
+            if self.non_empty_front && self.front_cell_count == 0 {
+                result = Err(ConflReason::CellCount);
             }
         }
         cell.reason.set(Some(reason));
@@ -483,6 +477,7 @@ impl<'a, R: Rule> World<'a, R> {
     /// Clears the `state` of a cell,
     /// and update the neighborhood descriptor of its neighbors.
     pub(crate) fn clear_cell(&mut self, cell: CellRef<'a, R>) -> Option<SetReason<'a, R>> {
+        cell.seen.set(false);
         let old_state = cell.state.take();
         if old_state != None {
             cell.update_desc(old_state, None);

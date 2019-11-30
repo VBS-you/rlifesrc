@@ -45,7 +45,7 @@
 //! ```
 
 mod cells;
-mod clause;
+// mod clause;
 mod config;
 pub mod rules;
 mod search;
