@@ -96,7 +96,7 @@ pub struct LifeCell<'a, R: Rule> {
     pub(crate) is_front: bool,
 
     /// Reason for setting the state of the cell.
-    pub(crate) reason: Cell<Option<Reason<'a, R>>>,
+    pub(crate) reason: Cell<Option<SetReason<'a, R>>>,
 
     /// The decision level for assigning the cell state.
     pub(crate) level: Cell<Option<usize>>,
@@ -176,7 +176,15 @@ impl<'a, R: Rule<Desc = D>, D: Copy + PartialEq + Debug> Debug for CellRef<'a, R
 }
 
 /// Reasons for setting a cell.
-pub enum Reason<'a, R: Rule> {
+#[derive(Derivative)]
+#[derivative(
+    Clone(bound = ""),
+    Copy(bound = ""),
+    PartialEq = "feature_allow_slow_enum",
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
+pub enum SetReason<'a, R: Rule> {
     /// Assumed when nothing can be deduced.
     ///
     /// The number is its position in the `search_list` of the world.
@@ -195,31 +203,28 @@ pub enum Reason<'a, R: Rule> {
     Conflict,
 }
 
-impl<'a, R: Rule> Clone for Reason<'a, R> {
-    fn clone(&self) -> Self {
-        match *self {
-            Reason::Assume(i) => Reason::Assume(i),
-            Reason::Init => Reason::Init,
-            Reason::Rule(cell) => Reason::Rule(cell),
-            Reason::Sym(cell, sym) => Reason::Sym(cell, sym),
-            Reason::Conflict => Reason::Conflict,
-        }
-    }
+/// Reasons for a conflict.
+#[derive(Derivative)]
+#[derivative(
+    Clone(bound = ""),
+    Copy(bound = ""),
+    PartialEq = "feature_allow_slow_enum",
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
+pub enum ConflReason<'a, R: Rule> {
+    /// Deduced from the rule when constitifying another cell.
+    Rule(CellRef<'a, R>),
+
+    /// Deduced from symmetry.
+    Sym(CellRef<'a, R>, CellRef<'a, R>),
+
+    /// Deduced from another conflict.
+    Conflict,
+
+    /// Deduced from conditions about cell counts.
+    CellCount,
+
+    /// Not a conflict, but returning from a succeed.
+    Succeed,
 }
-
-impl<'a, R: Rule> Copy for Reason<'a, R> {}
-
-impl<'a, R: Rule> PartialEq for Reason<'a, R> {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Reason::Assume(i), Reason::Assume(j)) => i == j,
-            (Reason::Init, Reason::Init) => true,
-            (Reason::Rule(cell0), Reason::Rule(cell1)) => cell0 == cell1,
-            (Reason::Sym(cell0, sym0), Reason::Sym(cell1, sym1)) => cell0 == cell1 && sym0 == sym1,
-            (Reason::Conflict, Reason::Conflict) => true,
-            _ => false,
-        }
-    }
-}
-
-impl<'a, R: Rule> Eq for Reason<'a, R> {}

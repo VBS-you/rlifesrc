@@ -1,7 +1,7 @@
 //! The world.
 
 use crate::{
-    cells::{Alive, CellRef, Dead, LifeCell, Reason, State},
+    cells::{Alive, CellRef, ConflReason, Dead, LifeCell, SetReason, State},
     // clause::Clause,
     config::{Config, NewState, SearchOrder, Symmetry, Transform},
     rules::Rule,
@@ -259,7 +259,7 @@ impl<'a, R: Rule> World<'a, R> {
                             && y < self.height
                             && cell.reason.get().is_none()
                         {
-                            cell.reason.set(Some(Reason::Init));
+                            cell.reason.set(Some(SetReason::Init));
                             self.set_stack.push(cell);
                         }
                     }
@@ -351,7 +351,7 @@ impl<'a, R: Rule> World<'a, R> {
                             && y < self.height
                             && cell.reason.get().is_none()
                         {
-                            cell.reason.set(Some(Reason::Init));
+                            cell.reason.set(Some(SetReason::Init));
                             self.set_stack.push(cell);
                         }
                     }
@@ -438,8 +438,8 @@ impl<'a, R: Rule> World<'a, R> {
         &mut self,
         cell: CellRef<'a, R>,
         state: State,
-        reason: Reason<'a, R>,
-    ) -> Result<(), Reason<'a, R>> {
+        reason: SetReason<'a, R>,
+    ) -> Result<(), ConflReason<'a, R>> {
         let old_state = cell.state.replace(Some(state));
         let mut result = Ok(());
         if old_state != Some(state) {
@@ -450,7 +450,7 @@ impl<'a, R: Rule> World<'a, R> {
                     self.cell_count[cell.gen] += 1;
                     if let Some(max) = self.max_cell_count {
                         if *self.cell_count.iter().min().unwrap() > max {
-                            result = Err(Reason::Conflict);
+                            result = Err(ConflReason::CellCount);
                         }
                     }
                 }
@@ -463,7 +463,7 @@ impl<'a, R: Rule> World<'a, R> {
                     (Dead, _) => {
                         self.front_cell_count -= 1;
                         if self.non_empty_front && self.front_cell_count == 0 {
-                            result = Err(Reason::Conflict);
+                            result = Err(ConflReason::CellCount);
                         }
                     }
                     (_, Some(Dead)) => self.front_cell_count += 1,
@@ -472,7 +472,7 @@ impl<'a, R: Rule> World<'a, R> {
             }
         }
         cell.reason.set(Some(reason));
-        if let Reason::Assume(_) = reason {
+        if let SetReason::Assume(_) = reason {
             self.level += 1;
         }
         cell.level.set(Some(self.level));
@@ -482,7 +482,7 @@ impl<'a, R: Rule> World<'a, R> {
 
     /// Clears the `state` of a cell,
     /// and update the neighborhood descriptor of its neighbors.
-    pub(crate) fn clear_cell(&mut self, cell: CellRef<'a, R>) -> Option<Reason<'a, R>> {
+    pub(crate) fn clear_cell(&mut self, cell: CellRef<'a, R>) -> Option<SetReason<'a, R>> {
         let old_state = cell.state.take();
         if old_state != None {
             cell.update_desc(old_state, None);
@@ -493,7 +493,7 @@ impl<'a, R: Rule> World<'a, R> {
                 self.front_cell_count += 1;
             }
         }
-        if let Some(Reason::Assume(_)) = cell.reason.get() {
+        if let Some(SetReason::Assume(_)) = cell.reason.get() {
             self.level -= 1;
         }
         cell.reason.take()

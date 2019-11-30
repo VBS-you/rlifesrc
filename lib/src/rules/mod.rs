@@ -7,7 +7,7 @@
 mod ntlife;
 
 use crate::{
-    cells::{CellRef, Reason, State},
+    cells::{CellRef, ConflReason, State},
     world::World,
 };
 // pub use life::Life;
@@ -47,5 +47,5 @@ pub trait Rule: Sized {
     fn consistify<'a>(
         world: &mut World<'a, Self>,
         cell: CellRef<'a, Self>,
-    ) -> Result<(), Reason<'a, Self>>;
+    ) -> Result<(), ConflReason<'a, Self>>;
 }

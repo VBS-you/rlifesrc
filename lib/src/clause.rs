@@ -1,5 +1,5 @@
 use crate::{
-    cells::{CellRef, Reason, State},
+    cells::{CellRef, ConflReason, SetReason, State},
     rules::Rule,
 };
 use std::{iter::once, ops::Not};
@@ -52,10 +52,10 @@ impl<'a, R: Rule> Clone for Clause<'a, R> {
     }
 }
 
-impl<'a, R: Rule> Reason<'a, R> {
+impl<'a, R: Rule> SetReason<'a, R> {
     pub(crate) fn to_lits(self, cell: Option<CellRef<'a, R>>) -> Vec<Lit<'a, R>> {
         match self {
-            Reason::Rule(cell1) => cell1
+            SetReason::Rule(cell1) => cell1
                 .nbhd
                 .iter()
                 .chain(once(&Some(cell1)))
@@ -65,7 +65,32 @@ impl<'a, R: Rule> Reason<'a, R> {
                     _ => None,
                 })
                 .collect(),
-            Reason::Sym(cell1, sym) => once(&Some(cell1))
+            SetReason::Sym(cell1, sym) => once(&Some(cell1))
+                .chain(once(&Some(sym)))
+                .filter_map(|&c| match c {
+                    Some(c) if Some(c) != cell => c.state.get().map(|state| Lit { cell: c, state }),
+                    _ => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+}
+
+impl<'a, R: Rule> ConflReason<'a, R> {
+    pub(crate) fn to_lits(self, cell: Option<CellRef<'a, R>>) -> Vec<Lit<'a, R>> {
+        match self {
+            ConflReason::Rule(cell1) => cell1
+                .nbhd
+                .iter()
+                .chain(once(&Some(cell1)))
+                .chain(once(&cell1.succ))
+                .filter_map(|&c| match c {
+                    Some(c) if Some(c) != cell => c.state.get().map(|state| Lit { cell: c, state }),
+                    _ => None,
+                })
+                .collect(),
+            ConflReason::Sym(cell1, sym) => once(&Some(cell1))
                 .chain(once(&Some(sym)))
                 .filter_map(|&c| match c {
                     Some(c) if Some(c) != cell => c.state.get().map(|state| Lit { cell: c, state }),
