@@ -1,6 +1,7 @@
 //! Cells in the cellular automaton.
 
 use crate::rules::Rule;
+use derivative::Derivative;
 use rand::{
     distributions::{Distribution, Standard},
     Rng,
@@ -140,6 +141,8 @@ impl<'a, R: Rule<Desc = D>, D: Copy + PartialEq + Debug> Debug for LifeCell<'a, 
     }
 }
 
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""), Copy(bound = ""))]
 pub struct CellRef<'a, R: Rule> {
     cell: &'a LifeCell<'a, R>,
 }
@@ -149,14 +152,6 @@ impl<'a, R: Rule> CellRef<'a, R> {
         R::update_desc(self, old_state, state);
     }
 }
-
-impl<'a, R: Rule> Clone for CellRef<'a, R> {
-    fn clone(&self) -> Self {
-        CellRef { cell: self.cell }
-    }
-}
-
-impl<'a, R: Rule> Copy for CellRef<'a, R> {}
 
 impl<'a, R: Rule> Deref for CellRef<'a, R> {
     type Target = LifeCell<'a, R>;
