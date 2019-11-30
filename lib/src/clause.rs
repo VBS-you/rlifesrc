@@ -1,5 +1,5 @@
 use crate::{
-    cells::{CellRef, Reason, State},
+    cells::{CellRef, ConflReason, SetReason, State},
     rules::Rule,
 };
 use std::{iter::once, ops::Not};
@@ -52,26 +52,53 @@ impl<'a, R: Rule> Clone for Clause<'a, R> {
     }
 }
 
-impl<'a, R: Rule> Reason<'a, R> {
-    pub(crate) fn to_lits(self, cell: Option<CellRef<'a, R>>) -> Vec<Lit<'a, R>> {
+impl<'a, R: Rule> SetReason<'a, R> {
+    pub(crate) fn to_lits(self, cell: CellRef<'a, R>) -> Vec<Lit<'a, R>> {
         match self {
-            Reason::Rule(cell1) => cell1
+            SetReason::Rule(cell0) => cell0
                 .nbhd
                 .iter()
-                .chain(once(&Some(cell1)))
-                .chain(once(&cell1.succ))
-                .filter_map(|&c| match c {
-                    Some(c) if Some(c) != cell => c.state.get().map(|state| Lit { cell: c, state }),
-                    _ => None,
+                .chain(once(&Some(cell0)))
+                .chain(once(&cell0.succ))
+                .filter_map(|&c| {
+                    c.and_then(|c| {
+                        if c != cell {
+                            c.state.get().map(|state| Lit { cell: c, state })
+                        } else {
+                            None
+                        }
+                    })
                 })
                 .collect(),
-            Reason::Sym(cell1, sym) => once(&Some(cell1))
-                .chain(once(&Some(sym)))
-                .filter_map(|&c| match c {
-                    Some(c) if Some(c) != cell => c.state.get().map(|state| Lit { cell: c, state }),
-                    _ => None,
-                })
+            SetReason::Sym(sym) => vec![Lit {
+                cell: sym,
+                state: sym.state.get().unwrap(),
+            }],
+            _ => Vec::new(),
+        }
+    }
+}
+
+impl<'a, R: Rule> ConflReason<'a, R> {
+    pub(crate) fn to_lits(self) -> Vec<Lit<'a, R>> {
+        match self {
+            ConflReason::Rule(cell) => cell
+                .nbhd
+                .iter()
+                .chain(once(&Some(cell)))
+                .chain(once(&cell.succ))
+                .filter_map(|&c| c.and_then(|c| c.state.get().map(|state| Lit { cell: c, state })))
                 .collect(),
+            ConflReason::Sym(cell, sym) => vec![
+                Lit {
+                    cell,
+                    state: cell.state.get().unwrap(),
+                },
+                Lit {
+                    cell: sym,
+                    state: sym.state.get().unwrap(),
+                },
+            ],
             _ => Vec::new(),
         }
     }

@@ -1,7 +1,7 @@
 //! Non-totalistic life-like rules.
 
 use crate::{
-    cells::{Alive, CellRef, Dead, Reason, State},
+    cells::{Alive, CellRef, ConflReason, Dead, SetReason, State},
     rules::Rule,
     world::World,
 };
@@ -268,11 +268,11 @@ impl Rule for NtLife {
     fn consistify<'a>(
         world: &mut World<'a, Self>,
         cell: CellRef<'a, Self>,
-    ) -> Result<(), Reason<'a, Self>> {
+    ) -> Result<(), ConflReason<'a, Self>> {
         let flags = world.rule.impl_table[cell.desc.get().0];
 
         if flags.contains(ImplFlags::CONFLICT) {
-            return Err(Reason::Rule(cell));
+            return Err(ConflReason::Rule(cell));
         }
 
         if flags.intersects(ImplFlags::SUCC_DEAD | ImplFlags::SUCC_ALIVE) {
@@ -282,7 +282,7 @@ impl Rule for NtLife {
                 Alive
             };
             let succ = cell.succ.unwrap();
-            return world.set_cell(succ, state, Reason::Rule(cell));
+            return world.set_cell(succ, state, SetReason::Rule(cell));
         }
 
         if flags.intersects(ImplFlags::SELF_DEAD | ImplFlags::SELF_ALIVE) {
@@ -291,7 +291,7 @@ impl Rule for NtLife {
             } else {
                 Alive
             };
-            world.set_cell(cell, state, Reason::Rule(cell))?;
+            world.set_cell(cell, state, SetReason::Rule(cell))?;
         }
 
         if flags.intersects(ImplFlags::NBHD) {
@@ -304,7 +304,7 @@ impl Rule for NtLife {
                             } else {
                                 Alive
                             };
-                        world.set_cell(neigh, state, Reason::Rule(cell))?;
+                        world.set_cell(neigh, state, SetReason::Rule(cell))?;
                     }
                 }
             }
