@@ -1,4 +1,4 @@
-use rlifesrc_lib::{Config, Search, Status};
+use rlifesrc_lib::{Config, Status, World};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use yew::{
@@ -43,7 +43,7 @@ impl Job {
 
 pub struct Worker {
     status: Status,
-    search: Box<dyn Search>,
+    search: Option<World<'static>>,
     link: AgentLink<Worker>,
     job: Job,
 }
@@ -67,8 +67,8 @@ pub struct Step;
 
 impl Worker {
     fn update_world(&mut self, id: HandlerId, gen: isize) {
-        let world = self.search.display_gen(gen);
-        let count = self.search.cell_count(gen);
+        let world = self.search.as_ref().unwrap().display_gen(gen);
+        let count = self.search.as_ref().unwrap().cell_count(gen);
         self.link
             .response(id, Response::UpdateWorld((world, count)));
         self.update_status(id);
@@ -88,7 +88,7 @@ impl Agent for Worker {
 
     fn create(link: AgentLink<Self>) -> Self {
         let config: Config = Default::default();
-        let search = config.set_world().unwrap();
+        let search = config.set_world().ok();
 
         let status = Status::Paused;
         let job = Job::new(&link);
@@ -103,7 +103,7 @@ impl Agent for Worker {
 
     fn update(&mut self, _msg: Self::Message) {
         if let Status::Searching = self.status {
-            self.status = self.search.search(Some(VIEW_FREQ));
+            self.status = self.search.as_mut().unwrap().search(Some(VIEW_FREQ));
             self.job.start();
         } else {
             self.job.stop();
@@ -126,7 +126,7 @@ impl Agent for Worker {
                 self.job.stop();
                 self.status = Status::Paused;
                 if let Ok(search) = config.set_world() {
-                    self.search = search;
+                    self.search.replace(search);
                     self.update_world(id, 0);
                 } else {
                     self.link.response(id, Response::InvalidRule);

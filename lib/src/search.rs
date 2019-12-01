@@ -129,11 +129,11 @@ impl<'a> World<'a> {
     ///
     /// Returns `true` if it backtracks successfully,
     /// `false` if it goes back to the time before the first cell is set.
-    fn analyze(&mut self, reason: ConflReason<'a>) -> bool {
-        if let ConflReason::Conflict | ConflReason::CellCount | ConflReason::Succeed = reason {
+    fn analyze(&mut self, reason: Vec<CellRef<'a>>) -> bool {
+        if reason.is_empty() {
             return self.backup();
         }
-        let mut reason_cells = reason.cells();
+        let mut reason_cells = reason;
         let mut max_level = 0;
         let mut counter = 0;
         loop {
@@ -222,7 +222,7 @@ impl<'a> World<'a> {
                 Ok(()) => return true,
                 Err(reason) => {
                     self.conflicts += 1;
-                    if !self.analyze(reason) {
+                    if !self.analyze(reason.cells()) {
                         return false;
                     }
                 }
@@ -285,66 +285,12 @@ impl<'a> World<'a> {
         }
         Status::None
     }
-}
-
-/// A trait for `World`.
-///
-/// So that we can switch between different rule types using trait objects.
-pub trait Search {
-    /// The search function.
-    ///
-    /// Returns `Found` if a result is found,
-    /// `None` if such pattern does not exist,
-    /// `Searching` if the number of steps exceeds `max_step`
-    /// and no results are found.
-    fn search(&mut self, max_step: Option<u64>) -> Status;
-
-    /// Displays the whole world in some generation.
-    ///
-    /// * **Dead** cells are represented by `.`;
-    /// * **Living** cells are represented by `O`;
-    /// * **Unknown** cells are represented by `?`.
-    fn display_gen(&self, t: isize) -> String;
-
-    /// Period of the pattern.
-    fn period(&self) -> isize;
-
-    /// Number of known living cells in the first generation.
-    fn cell_count(&self, t: isize) -> usize;
-
-    /// Number of conflicts during the search.
-    fn conflicts(&self) -> u64;
 
     /// Set the max cell counts.
     ///
     /// Currently this is the only parameter that you can change
     /// during the search.
-    fn set_max_cell_count(&mut self, max_cell_count: Option<usize>);
-}
-
-/// The `Search` trait is implemented for every `World`.
-impl<'a> Search for World<'a> {
-    fn search(&mut self, max_step: Option<u64>) -> Status {
-        self.search(max_step)
-    }
-
-    fn display_gen(&self, t: isize) -> String {
-        self.display_gen(t)
-    }
-
-    fn period(&self) -> isize {
-        self.period
-    }
-
-    fn cell_count(&self, t: isize) -> usize {
-        self.cell_count[t as usize]
-    }
-
-    fn conflicts(&self) -> u64 {
-        self.conflicts
-    }
-
-    fn set_max_cell_count(&mut self, max_cell_count: Option<usize>) {
+    pub fn set_max_cell_count(&mut self, max_cell_count: Option<usize>) {
         self.max_cell_count = max_cell_count;
         if let Some(max) = self.max_cell_count {
             while *self.cell_count.iter().min().unwrap() > max {

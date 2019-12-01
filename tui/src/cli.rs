@@ -1,23 +1,23 @@
 use crate::tui::search_with_tui;
 use clap::{App, AppSettings, Arg, Error, ErrorKind};
 use rlifesrc_lib::{
-    Config, NewState, Rule, Search, SearchOrder,
+    Config, NewState, Rule, SearchOrder,
     State::{Alive, Dead},
-    Status, Symmetry, Transform,
+    Status, Symmetry, Transform, World,
 };
 
 fn is_positive(s: &str) -> bool {
     s.chars().all(|c| c.is_ascii_digit()) && s != "0" && !s.starts_with('-')
 }
 
-pub struct Args {
-    search: Box<dyn Search>,
+pub struct Args<'a> {
+    search: World<'a>,
     all: bool,
     reset: bool,
     no_tui: bool,
 }
 
-pub fn parse_args() -> Option<Args> {
+pub fn parse_args<'a>() -> Option<Args<'a>> {
     let app = App::new("rlifesrc")
         .about("Searching for patterns in Conway's Game of Life")
         .version("0.1.0")

@@ -1,6 +1,6 @@
 //! World configuration.
 
-use crate::{cells::State, rule::Rule, search::Search, world::World};
+use crate::{cells::State, world::World};
 use derivative::Derivative;
 use std::{
     cmp::Ordering,
@@ -446,12 +446,7 @@ impl Config {
     /// After the last generation, the pattern will return to
     /// the first generation, applying the transformation first,
     /// and then the translation defined by `dx` and `dy`.
-    pub fn set_world(&self) -> Result<Box<dyn Search>, String> {
-        // if let Ok(rule) = Life::parse_rule(&self.rule_string) {
-        //     Ok(Box::new(World::new(&self, rule)))
-        // } else {
-        let rule = Rule::parse_rule(&self.rule_string)?;
-        Ok(Box::new(World::new(&self, rule)))
-        // }
+    pub fn set_world<'a>(&self) -> Result<World<'a>, String> {
+        World::new(self)
     }
 }

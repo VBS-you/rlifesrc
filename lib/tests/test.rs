@@ -2,7 +2,8 @@ use rlifesrc_lib::{Config, Status, Symmetry, Transform};
 
 #[test]
 fn default() {
-    let mut search = Config::default().set_world().unwrap();
+    let config = Config::default();
+    let mut search = config.set_world().unwrap();
     assert_eq!(search.search(None), Status::Found);
 }
 

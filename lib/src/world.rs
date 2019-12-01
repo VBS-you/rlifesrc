@@ -95,7 +95,8 @@ impl<'a> World<'a> {
     /// After the last generation, the pattern will return to
     /// the first generation, applying the transformation first,
     /// and then the translation defined by `dx` and `dy`.
-    pub fn new(config: &Config, rule: Rule) -> Self {
+    pub fn new(config: &Config) -> Result<Self, String> {
+        let rule = Rule::parse_rule(&config.rule_string)?;
         let search_order = config.auto_search_order();
 
         let size = ((config.width + 2) * (config.height + 2) * config.period) as usize;
@@ -160,7 +161,7 @@ impl<'a> World<'a> {
             }
         }
 
-        World {
+        let world = World {
             width: config.width,
             height: config.height,
             period: config.period,
@@ -183,7 +184,8 @@ impl<'a> World<'a> {
         .init_pred_succ(config.dx, config.dy, config.transform)
         .init_sym(config.symmetry)
         .init_state()
-        .init_search_order(search_order)
+        .init_search_order(search_order);
+        Ok(world)
     }
 
     /// Links the cells to their neighbors.
@@ -499,7 +501,7 @@ impl<'a> World<'a> {
     /// * **Dead** cells are represented by `.`;
     /// * **Living** cells are represented by `O`;
     /// * **Unknown** cells are represented by `?`.
-    pub(crate) fn display_gen(&self, t: isize) -> String {
+    pub fn display_gen(&self, t: isize) -> String {
         let mut str = String::new();
         let t = t % self.period;
         for y in 0..self.height {
@@ -542,5 +544,20 @@ impl<'a> World<'a> {
                         .chunks(self.period as usize)
                         .any(|c| c[0].state.get() != c[t as usize].state.get())
             })
+    }
+
+    /// Period of the pattern.
+    pub fn period(&self) -> isize {
+        self.period
+    }
+
+    /// Number of known living cells in a generation.
+    pub fn cell_count(&self, t: isize) -> usize {
+        self.cell_count[t as usize]
+    }
+
+    /// Number of conflicts during the search.
+    pub fn conflicts(&self) -> u64 {
+        self.conflicts
     }
 }

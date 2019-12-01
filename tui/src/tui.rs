@@ -6,7 +6,7 @@ const VIEW_FREQ: u64 = 5000;
 const VIEW_FREQ: u64 = 100000;
 
 use pancurses::{ColorPair, Input, Window};
-use rlifesrc_lib::{Search, Status};
+use rlifesrc_lib::{Status, World};
 use std::time::{Duration, Instant};
 
 struct SearchWindow {
@@ -54,7 +54,7 @@ impl SearchWindow {
         }
     }
 
-    fn update(&self, search: &Box<dyn Search>) {
+    fn update(&self, search: &World) {
         self.world_win.erase();
         self.world_win.mvprintw(0, 0, search.display_gen(self.gen));
         self.world_win.refresh();
@@ -124,7 +124,7 @@ impl SearchWindow {
     }
 }
 
-pub fn search_with_tui(mut search: Box<dyn Search>, reset: bool) {
+pub fn search_with_tui(mut search: World, reset: bool) {
     let period = search.period();
     let mut search_win = SearchWindow::new();
     search_win.update(&search);

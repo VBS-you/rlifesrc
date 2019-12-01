@@ -1,7 +1,6 @@
 //! Cells in the cellular automaton.
 
 use crate::rule::Desc;
-use derivative::Derivative;
 use rand::{
     distributions::{Distribution, Standard},
     Rng,
@@ -20,7 +19,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// During the search, the state of a cell is represented by `Option<State>`,
 /// where `None` means that the state of the cell is unknown.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "stdweb", derive(Serialize, Deserialize))]
 pub enum State {
     Alive = 0b01,
@@ -145,9 +144,8 @@ impl<'a> Debug for LifeCell<'a> {
     }
 }
 
-#[derive(Derivative)]
-#[derivative(Clone(bound = ""), Copy(bound = ""))]
-pub struct CellRef<'a> {
+#[derive(Clone, Copy)]
+pub(crate) struct CellRef<'a> {
     cell: &'a LifeCell<'a>,
 }
 
@@ -174,15 +172,8 @@ impl<'a> Debug for CellRef<'a> {
 }
 
 /// Reasons for setting a cell.
-#[derive(Derivative)]
-#[derivative(
-    Clone(bound = ""),
-    Copy(bound = ""),
-    PartialEq = "feature_allow_slow_enum",
-    PartialEq(bound = ""),
-    Eq(bound = "")
-)]
-pub enum SetReason<'a> {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SetReason<'a> {
     /// Assumed when nothing can be deduced.
     ///
     /// The number is its position in the `search_list` of the world.
@@ -202,27 +193,14 @@ pub enum SetReason<'a> {
 }
 
 /// Reasons for a conflict.
-#[derive(Derivative)]
-#[derivative(
-    Clone(bound = ""),
-    Copy(bound = ""),
-    PartialEq = "feature_allow_slow_enum",
-    PartialEq(bound = ""),
-    Eq(bound = "")
-)]
-pub enum ConflReason<'a> {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ConflReason<'a> {
     /// Deduced from the rule when constitifying another cell.
     Rule(CellRef<'a>),
 
     /// Deduced from symmetry.
     Sym(CellRef<'a>, CellRef<'a>),
 
-    /// Deduced from another conflict.
-    Conflict,
-
     /// Deduced from conditions about cell counts.
     CellCount,
-
-    /// Not a conflict, but returning from a succeed.
-    Succeed,
 }

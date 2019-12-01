@@ -54,5 +54,5 @@ mod world;
 pub use cells::State;
 pub use config::{Config, NewState, SearchOrder, Symmetry, Transform};
 pub use rule::Rule;
-pub use search::{Search, Status};
+pub use search::Status;
 pub use world::World;
