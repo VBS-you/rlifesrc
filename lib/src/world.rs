@@ -4,7 +4,7 @@ use crate::{
     cells::{Alive, CellRef, ConflReason, Dead, LifeCell, SetReason, State},
     // clause::Clause,
     config::{Config, NewState, SearchOrder, Symmetry, Transform},
-    rules::Rule,
+    rule::Rule,
 };
 
 /// The coordinates of a cell.
@@ -14,7 +14,7 @@ use crate::{
 pub type Coord = (isize, isize, isize);
 
 /// The world.
-pub struct World<'a, R: Rule> {
+pub struct World<'a> {
     /// Width.
     pub(crate) width: isize,
     /// Height.
@@ -22,19 +22,19 @@ pub struct World<'a, R: Rule> {
     /// Period.
     pub(crate) period: isize,
     /// The rule of the cellular automaton.
-    pub(crate) rule: R,
+    pub(crate) rule: Rule,
 
     /// A vector that stores all the cells in the search range.
     ///
     /// The vector will not be moved after it is created.
     /// All the cells will live throughout the lifetime of the world.
     // So the unsafe code below is actually safe.
-    cells: Vec<LifeCell<'a, R>>,
+    cells: Vec<LifeCell<'a>>,
 
     /// A list of references of cells sorted by the search order.search
     ///
     /// Used to find unknown cells.
-    search_list: Vec<CellRef<'a, R>>,
+    search_list: Vec<CellRef<'a>>,
 
     /// Number of known living cells in each generation.
     pub(crate) cell_count: Vec<usize>,
@@ -53,7 +53,7 @@ pub struct World<'a, R: Rule> {
     /// The cells in this table always have known states.
     ///
     /// It is used in the backtracking.
-    pub(crate) set_stack: Vec<CellRef<'a, R>>,
+    pub(crate) set_stack: Vec<CellRef<'a>>,
 
     /// The position in the `set_stack` of the next cell to be examined.
     ///
@@ -85,7 +85,7 @@ pub struct World<'a, R: Rule> {
     pub(crate) reduce_max: bool,
 }
 
-impl<'a, R: Rule> World<'a, R> {
+impl<'a> World<'a> {
     /// Creates a new world from the configuration and the rule.
     ///
     /// In rules that contain `B0`, cells outside the search range are
@@ -95,7 +95,7 @@ impl<'a, R: Rule> World<'a, R> {
     /// After the last generation, the pattern will return to
     /// the first generation, applying the transformation first,
     /// and then the translation defined by `dx` and `dy`.
-    pub fn new(config: &Config, rule: R) -> Self {
+    pub fn new(config: &Config, rule: Rule) -> Self {
         let search_order = config.auto_search_order();
 
         let size = ((config.width + 2) * (config.height + 2) * config.period) as usize;
@@ -127,8 +127,8 @@ impl<'a, R: Rule> World<'a, R> {
         for x in -1..=config.width {
             for y in -1..=config.height {
                 for t in 0..config.period {
-                    let state = if rule.b0() && t % 2 == 1 { Alive } else { Dead };
-                    let mut cell = LifeCell::new(state, rule.b0(), t as usize);
+                    let state = if rule.b0 && t % 2 == 1 { Alive } else { Dead };
+                    let mut cell = LifeCell::new(state, rule.b0, t as usize);
                     match search_order {
                         SearchOrder::ColumnFirst => {
                             if front_gen0 {
@@ -413,7 +413,7 @@ impl<'a, R: Rule> World<'a, R> {
 
     /// Finds a cell by its coordinates. Returns a reference that lives
     /// as long as the world.
-    fn find_cell(&self, coord: Coord) -> Option<CellRef<'a, R>> {
+    fn find_cell(&self, coord: Coord) -> Option<CellRef<'a>> {
         let (x, y, t) = coord;
         if x >= -1 && x <= self.width && y >= -1 && y <= self.height {
             let index = ((x + 1) * (self.height + 2) + y + 1) * self.period + t;
@@ -425,7 +425,7 @@ impl<'a, R: Rule> World<'a, R> {
     }
 
     /// Finds a cell by its coordinates. Returns a mutable pointer.
-    fn find_cell_mut(&mut self, coord: Coord) -> Option<*mut LifeCell<'a, R>> {
+    fn find_cell_mut(&mut self, coord: Coord) -> Option<*mut LifeCell<'a>> {
         let (x, y, t) = coord;
         if x >= -1 && x <= self.width && y >= -1 && y <= self.height {
             let index = ((x + 1) * (self.height + 2) + y + 1) * self.period + t;
@@ -444,10 +444,10 @@ impl<'a, R: Rule> World<'a, R> {
     /// or the front becomes empty.
     pub(crate) fn set_cell(
         &mut self,
-        cell: CellRef<'a, R>,
+        cell: CellRef<'a>,
         state: State,
-        reason: SetReason<'a, R>,
-    ) -> Result<(), ConflReason<'a, R>> {
+        reason: SetReason<'a>,
+    ) -> Result<(), ConflReason<'a>> {
         cell.state.set(Some(state));
         let mut result = Ok(());
         cell.update_desc(None, Some(state));
@@ -476,7 +476,7 @@ impl<'a, R: Rule> World<'a, R> {
 
     /// Clears the `state` of a cell,
     /// and update the neighborhood descriptor of its neighbors.
-    pub(crate) fn clear_cell(&mut self, cell: CellRef<'a, R>) -> Option<SetReason<'a, R>> {
+    pub(crate) fn clear_cell(&mut self, cell: CellRef<'a>) -> Option<SetReason<'a>> {
         cell.seen.set(false);
         let old_state = cell.state.take();
         if old_state != None {
@@ -518,7 +518,7 @@ impl<'a, R: Rule> World<'a, R> {
     }
 
     /// Gets a references to the first unknown cell since `index` in the `search_list`.
-    pub(crate) fn get_unknown(&self, index: usize) -> Option<(usize, CellRef<'a, R>)> {
+    pub(crate) fn get_unknown(&self, index: usize) -> Option<(usize, CellRef<'a>)> {
         self.search_list[index..]
             .iter()
             .enumerate()

@@ -47,11 +47,12 @@
 mod cells;
 // mod clause;
 mod config;
-pub mod rules;
+mod rule;
 mod search;
 mod world;
 
 pub use cells::State;
 pub use config::{Config, NewState, SearchOrder, Symmetry, Transform};
+pub use rule::Rule;
 pub use search::{Search, Status};
 pub use world::World;

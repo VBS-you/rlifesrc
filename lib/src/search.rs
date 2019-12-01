@@ -4,7 +4,7 @@ use crate::{
     cells::{CellRef, ConflReason, SetReason, State},
     // clause::Clause,
     config::NewState,
-    rules::Rule,
+    rule::Rule,
     world::World,
 };
 
@@ -25,7 +25,7 @@ pub enum Status {
     Paused,
 }
 
-impl<'a, R: Rule> World<'a, R> {
+impl<'a> World<'a> {
     /// Consistifies a cell.
     ///
     /// Examines the state and the neighborhood descriptor of the cell,
@@ -34,14 +34,14 @@ impl<'a, R: Rule> World<'a, R> {
     /// cells involved.
     ///
     /// If there is a conflict, returns its reason.
-    fn consistify(&mut self, cell: CellRef<'a, R>) -> Result<(), ConflReason<'a, R>> {
+    fn consistify(&mut self, cell: CellRef<'a>) -> Result<(), ConflReason<'a>> {
         Rule::consistify(self, cell)
     }
 
     /// Consistifies a cell, its neighbors, and its predecessor.
     ///
     /// If there is a conflict, returns its reason.
-    fn consistify10(&mut self, cell: CellRef<'a, R>) -> Result<(), ConflReason<'a, R>> {
+    fn consistify10(&mut self, cell: CellRef<'a>) -> Result<(), ConflReason<'a>> {
         self.consistify(cell)?;
         if let Some(pred) = cell.pred {
             self.consistify(pred)?;
@@ -57,7 +57,7 @@ impl<'a, R: Rule> World<'a, R> {
     /// Deduces all the consequences by `consistify` and symmetry.
     ///
     /// If there is a conflict, returns its reason.
-    fn proceed(&mut self) -> Result<(), ConflReason<'a, R>> {
+    fn proceed(&mut self) -> Result<(), ConflReason<'a>> {
         while self.check_index < self.set_stack.len() {
             let cell = self.set_stack[self.check_index];
             let state = cell.state.get().unwrap();
@@ -85,7 +85,7 @@ impl<'a, R: Rule> World<'a, R> {
     /// and returns this cell and its state.
     ///
     /// Returns `None` if it goes back to the time before the first cell is set.
-    fn cancel(&mut self) -> Option<(CellRef<'a, R>, State)> {
+    fn cancel(&mut self) -> Option<(CellRef<'a>, State)> {
         while let Some(cell) = self.set_stack.pop() {
             match cell.reason.get() {
                 Some(SetReason::Assume(i)) => {
@@ -124,12 +124,12 @@ impl<'a, R: Rule> World<'a, R> {
     }
 
     /// Backtracks to the last time when a unknown cell is assumed,
-    /// switch that cell to the other state, and learns a clause from the
-    /// conflict.
+    /// analyzes the conflict during the backtracking, and
+    /// backjumps if possible.
     ///
     /// Returns `true` if it backtracks successfully,
     /// `false` if it goes back to the time before the first cell is set.
-    fn analyze(&mut self, reason: ConflReason<'a, R>) -> bool {
+    fn analyze(&mut self, reason: ConflReason<'a>) -> bool {
         if let ConflReason::Conflict | ConflReason::CellCount | ConflReason::Succeed = reason {
             return self.backup();
         }
@@ -237,7 +237,7 @@ impl<'a, R: Rule> World<'a, R> {
     ///
     /// Returns `None` is there is no unknown cell,
     /// `Some(false)` if the new state leads to an immediate conflict.
-    fn decide(&mut self) -> Option<Result<(), ConflReason<'a, R>>> {
+    fn decide(&mut self) -> Option<Result<(), ConflReason<'a>>> {
         if let Some((i, cell)) = self.get_unknown(self.search_index) {
             self.search_index = i + 1;
             let state = match self.new_state {
@@ -323,7 +323,7 @@ pub trait Search {
 }
 
 /// The `Search` trait is implemented for every `World`.
-impl<'a, R: Rule> Search for World<'a, R> {
+impl<'a> Search for World<'a> {
     fn search(&mut self, max_step: Option<u64>) -> Status {
         self.search(max_step)
     }

@@ -1,8 +1,7 @@
 use crate::tui::search_with_tui;
 use clap::{App, AppSettings, Arg, Error, ErrorKind};
 use rlifesrc_lib::{
-    rules::NtLife,
-    Config, NewState, Search, SearchOrder,
+    Config, NewState, Rule, Search, SearchOrder,
     State::{Alive, Dead},
     Status, Symmetry, Transform,
 };
@@ -122,7 +121,7 @@ pub fn parse_args() -> Option<Args> {
                 .long("rule")
                 .takes_value(true)
                 .default_value("B3/S23")
-                .validator(|d| NtLife::parse_rule(&d).map(|_| ())),
+                .validator(|d| Rule::parse_rule(&d).map(|_| ())),
         )
         .arg(
             Arg::with_name("ORDER")

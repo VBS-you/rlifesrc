@@ -2,7 +2,6 @@
 
 use crate::{
     cells::{Alive, CellRef, ConflReason, Dead, SetReason, State},
-    rules::Rule,
     world::World,
 };
 use bitflags::bitflags;
@@ -20,7 +19,111 @@ use ca_rules::ParseNtLife;
 /// * `0b_01` means alive,
 /// * `0b_00` means unknown.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct NbhdDesc(usize);
+pub struct Desc(usize);
+
+impl Desc {
+    pub(crate) fn new(state: State, succ_state: State) -> Desc {
+        let nbhd_state = match state {
+            Dead => 0xff00,
+            Alive => 0x00ff,
+        };
+        Desc(nbhd_state << 4 | (succ_state as usize) << 2 | state as usize)
+    }
+}
+
+impl<'a> CellRef<'a> {
+    pub(crate) fn update_desc(self, old_state: Option<State>, state: Option<State>) {
+        let nbhd_change_num = match (state, old_state) {
+            (Some(Dead), Some(Alive)) | (Some(Alive), Some(Dead)) => 0x0101,
+            (Some(Dead), None) | (None, Some(Dead)) => 0x0100,
+            (Some(Alive), None) | (None, Some(Alive)) => 0x0001,
+            _ => 0x0000,
+        };
+        for (i, &neigh) in self.nbhd.iter().rev().enumerate() {
+            let neigh = neigh.unwrap();
+            let mut desc = neigh.desc.get();
+            desc.0 ^= nbhd_change_num << i << 4;
+            neigh.desc.set(desc);
+        }
+
+        let change_num = match (state, old_state) {
+            (Some(Dead), Some(Alive)) | (Some(Alive), Some(Dead)) => 0b11,
+            (Some(Dead), None) | (None, Some(Dead)) => 0b10,
+            (Some(Alive), None) | (None, Some(Alive)) => 0b01,
+            _ => 0,
+        };
+        if let Some(pred) = self.pred {
+            let mut desc = pred.desc.get();
+            desc.0 ^= change_num << 2;
+            pred.desc.set(desc);
+        }
+        let mut desc = self.desc.get();
+        desc.0 ^= change_num;
+        self.desc.set(desc);
+    }
+}
+
+impl<'a> SetReason<'a> {
+    pub(crate) fn cells(self, cell: CellRef<'a>) -> Vec<CellRef<'a>> {
+        match self {
+            SetReason::Rule(cell0) => {
+                let desc = cell0.desc.get();
+                let mut cells = Vec::with_capacity(10);
+                if desc.0 & 0b11 != 0 && cell != cell0 {
+                    cells.push(cell0);
+                }
+                if desc.0 & 0b11 << 2 != 0 {
+                    if let Some(succ) = cell0.succ {
+                        if cell != succ {
+                            cells.push(succ);
+                        }
+                    }
+                }
+                for i in 0..8 {
+                    if desc.0 & 0x0101 << i << 4 != 0 {
+                        if let Some(neigh) = cell0.nbhd[i] {
+                            if cell != neigh {
+                                cells.push(neigh);
+                            }
+                        }
+                    }
+                }
+                cells
+            }
+            SetReason::Sym(sym) => vec![sym],
+            _ => Vec::new(),
+        }
+    }
+}
+
+impl<'a> ConflReason<'a> {
+    pub(crate) fn cells(self) -> Vec<CellRef<'a>> {
+        match self {
+            ConflReason::Rule(cell) => {
+                let desc = cell.desc.get();
+                let mut cells = Vec::with_capacity(10);
+                if desc.0 & 0b11 != 0 {
+                    cells.push(cell);
+                }
+                if desc.0 & 0b11 << 2 != 0 {
+                    if let Some(succ) = cell.succ {
+                        cells.push(succ);
+                    }
+                }
+                for i in 0..8 {
+                    if desc.0 & 0x0101 << i << 4 != 0 {
+                        if let Some(neigh) = cell.nbhd[i] {
+                            cells.push(neigh);
+                        }
+                    }
+                }
+                cells
+            }
+            ConflReason::Sym(cell, sym) => vec![cell, sym],
+            _ => Vec::new(),
+        }
+    }
+}
 
 bitflags! {
     /// Flags to imply the state of a cell and its neighbors.
@@ -57,22 +160,22 @@ bitflags! {
 /// life-like rule: isotropic non-totalistic rules,
 /// non-isotropic rules, hexagonal rules, rules with von Neumann
 /// neighborhoods, etc.
-pub struct NtLife {
+pub struct Rule {
     /// Whether the rule contains `B0`.
-    b0: bool,
+    pub(crate) b0: bool,
 
     /// An array of actions for all neighborhood descriptors.
     impl_table: Vec<ImplFlags>,
 }
 
-impl NtLife {
+impl Rule {
     /// Constructs a new rule from the `b` and `s` data.
     pub fn new(b: Vec<u8>, s: Vec<u8>) -> Self {
         let b0 = b.contains(&0);
 
         let impl_table = vec![ImplFlags::empty(); 1 << 20];
 
-        NtLife { b0, impl_table }
+        Rule { b0, impl_table }
             .init_trans(b, s)
             .init_conflict()
             .init_impl()
@@ -218,57 +321,11 @@ impl NtLife {
     pub fn parse_rule(input: &str) -> Result<Self, String> {
         ParseNtLife::parse_rule(input).map_err(|e| e.to_string())
     }
-}
 
-impl Rule for NtLife {
-    type Desc = NbhdDesc;
-
-    fn b0(&self) -> bool {
-        self.b0
-    }
-
-    fn new_desc(state: State, succ_state: State) -> Self::Desc {
-        let nbhd_state = match state {
-            Dead => 0xff00,
-            Alive => 0x00ff,
-        };
-        NbhdDesc(nbhd_state << 4 | (succ_state as usize) << 2 | state as usize)
-    }
-
-    fn update_desc(cell: CellRef<Self>, old_state: Option<State>, state: Option<State>) {
-        let nbhd_change_num = match (state, old_state) {
-            (Some(Dead), Some(Alive)) | (Some(Alive), Some(Dead)) => 0x0101,
-            (Some(Dead), None) | (None, Some(Dead)) => 0x0100,
-            (Some(Alive), None) | (None, Some(Alive)) => 0x0001,
-            _ => 0x0000,
-        };
-        for (i, &neigh) in cell.nbhd.iter().rev().enumerate() {
-            let neigh = neigh.unwrap();
-            let mut desc = neigh.desc.get();
-            desc.0 ^= nbhd_change_num << i << 4;
-            neigh.desc.set(desc);
-        }
-
-        let change_num = match (state, old_state) {
-            (Some(Dead), Some(Alive)) | (Some(Alive), Some(Dead)) => 0b11,
-            (Some(Dead), None) | (None, Some(Dead)) => 0b10,
-            (Some(Alive), None) | (None, Some(Alive)) => 0b01,
-            _ => 0,
-        };
-        if let Some(pred) = cell.pred {
-            let mut desc = pred.desc.get();
-            desc.0 ^= change_num << 2;
-            pred.desc.set(desc);
-        }
-        let mut desc = cell.desc.get();
-        desc.0 ^= change_num;
-        cell.desc.set(desc);
-    }
-
-    fn consistify<'a>(
-        world: &mut World<'a, Self>,
-        cell: CellRef<'a, Self>,
-    ) -> Result<(), ConflReason<'a, Self>> {
+    pub(crate) fn consistify<'a>(
+        world: &mut World<'a>,
+        cell: CellRef<'a>,
+    ) -> Result<(), ConflReason<'a>> {
         let flags = world.rule.impl_table[cell.desc.get().0];
 
         if flags.contains(ImplFlags::CONFLICT) {
@@ -315,7 +372,7 @@ impl Rule for NtLife {
 }
 
 /// A parser for the rule.
-impl ParseNtLife for NtLife {
+impl ParseNtLife for Rule {
     fn from_bs(b: Vec<u8>, s: Vec<u8>) -> Self {
         Self::new(b, s)
     }

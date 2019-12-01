@@ -1,12 +1,6 @@
 //! World configuration.
 
-use crate::{
-    cells::State,
-    // rules::{Life, NtLife},
-    rules::NtLife,
-    search::Search,
-    world::World,
-};
+use crate::{cells::State, rule::Rule, search::Search, world::World};
 use derivative::Derivative;
 use std::{
     cmp::Ordering,
@@ -456,7 +450,7 @@ impl Config {
         // if let Ok(rule) = Life::parse_rule(&self.rule_string) {
         //     Ok(Box::new(World::new(&self, rule)))
         // } else {
-        let rule = NtLife::parse_rule(&self.rule_string)?;
+        let rule = Rule::parse_rule(&self.rule_string)?;
         Ok(Box::new(World::new(&self, rule)))
         // }
     }

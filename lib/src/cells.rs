@@ -1,6 +1,6 @@
 //! Cells in the cellular automaton.
 
-use crate::rules::Rule;
+use crate::rule::Desc;
 use derivative::Derivative;
 use rand::{
     distributions::{Distribution, Standard},
@@ -9,7 +9,6 @@ use rand::{
 use std::{
     cell::Cell,
     fmt::{Debug, Error, Formatter},
-    iter::once,
     ops::{Deref, Not},
 };
 pub use State::{Alive, Dead};
@@ -56,7 +55,7 @@ impl Distribution<State> for Standard {
 ///
 /// The name `LifeCell` is chosen to avoid ambiguity with
 /// [`std::cell::Cell`](https://doc.rust-lang.org/std/cell/struct.Cell.html).
-pub struct LifeCell<'a, R: Rule> {
+pub struct LifeCell<'a> {
     /// The background state of a cell.
     ///
     /// For rules without `B0`, it is always dead.
@@ -73,21 +72,21 @@ pub struct LifeCell<'a, R: Rule> {
     ///
     /// It describes the states of the cell itself, its neighbors,
     /// and its successor.
-    pub(crate) desc: Cell<R::Desc>,
+    pub(crate) desc: Cell<Desc>,
 
     /// The predecessor of the cell.
     ///
     /// The cell in the last generation at the same position.
-    pub(crate) pred: Option<CellRef<'a, R>>,
+    pub(crate) pred: Option<CellRef<'a>>,
     /// The successor of the cell.
     ///
     /// The cell in the next generation at the same position.
-    pub(crate) succ: Option<CellRef<'a, R>>,
+    pub(crate) succ: Option<CellRef<'a>>,
     /// The eight cells in the neighborhood.
-    pub(crate) nbhd: [Option<CellRef<'a, R>>; 8],
+    pub(crate) nbhd: [Option<CellRef<'a>>; 8],
     /// The cells in the same generation that must has the same state
     /// with this cell because of the symmetry.
-    pub(crate) sym: Vec<CellRef<'a, R>>,
+    pub(crate) sym: Vec<CellRef<'a>>,
 
     /// The generation of the cell.
     pub(crate) gen: usize,
@@ -97,7 +96,7 @@ pub struct LifeCell<'a, R: Rule> {
     pub(crate) is_front: bool,
 
     /// Reason for setting the state of the cell.
-    pub(crate) reason: Cell<Option<SetReason<'a, R>>>,
+    pub(crate) reason: Cell<Option<SetReason<'a>>>,
 
     /// The decision level for assigning the cell state.
     pub(crate) level: Cell<Option<usize>>,
@@ -106,7 +105,7 @@ pub struct LifeCell<'a, R: Rule> {
     pub(crate) seen: Cell<bool>,
 }
 
-impl<'a, R: Rule> LifeCell<'a, R> {
+impl<'a> LifeCell<'a> {
     /// Generates a new cell with state `state`, such that its neighborhood
     /// descriptor says that all neighboring cells also have the same state.
     ///
@@ -116,7 +115,7 @@ impl<'a, R: Rule> LifeCell<'a, R> {
         LifeCell {
             background,
             state: Cell::new(Some(background)),
-            desc: Cell::new(R::new_desc(background, succ_state)),
+            desc: Cell::new(Desc::new(background, succ_state)),
             pred: Default::default(),
             succ: Default::default(),
             nbhd: Default::default(),
@@ -129,13 +128,13 @@ impl<'a, R: Rule> LifeCell<'a, R> {
         }
     }
 
-    pub(crate) unsafe fn to_ref(&self) -> CellRef<'a, R> {
-        let cell = (self as *const LifeCell<'a, R>).as_ref().unwrap();
+    pub(crate) unsafe fn to_ref(&self) -> CellRef<'a> {
+        let cell = (self as *const LifeCell<'a>).as_ref().unwrap();
         CellRef { cell }
     }
 }
 
-impl<'a, R: Rule<Desc = D>, D: Copy + PartialEq + Debug> Debug for LifeCell<'a, R> {
+impl<'a> Debug for LifeCell<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(
             f,
@@ -148,33 +147,27 @@ impl<'a, R: Rule<Desc = D>, D: Copy + PartialEq + Debug> Debug for LifeCell<'a, 
 
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Copy(bound = ""))]
-pub struct CellRef<'a, R: Rule> {
-    cell: &'a LifeCell<'a, R>,
+pub struct CellRef<'a> {
+    cell: &'a LifeCell<'a>,
 }
 
-impl<'a, R: Rule> CellRef<'a, R> {
-    pub(crate) fn update_desc(self, old_state: Option<State>, state: Option<State>) {
-        R::update_desc(self, old_state, state);
-    }
-}
-
-impl<'a, R: Rule> Deref for CellRef<'a, R> {
-    type Target = LifeCell<'a, R>;
+impl<'a> Deref for CellRef<'a> {
+    type Target = LifeCell<'a>;
 
     fn deref(&self) -> &Self::Target {
         self.cell
     }
 }
 
-impl<'a, R: Rule> PartialEq for CellRef<'a, R> {
+impl<'a> PartialEq for CellRef<'a> {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self.cell, other.cell)
     }
 }
 
-impl<'a, R: Rule> Eq for CellRef<'a, R> {}
+impl<'a> Eq for CellRef<'a> {}
 
-impl<'a, R: Rule<Desc = D>, D: Copy + PartialEq + Debug> Debug for CellRef<'a, R> {
+impl<'a> Debug for CellRef<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "CellRef {{ cell: {:?} }}", self.cell)
     }
@@ -189,7 +182,7 @@ impl<'a, R: Rule<Desc = D>, D: Copy + PartialEq + Debug> Debug for CellRef<'a, R
     PartialEq(bound = ""),
     Eq(bound = "")
 )]
-pub enum SetReason<'a, R: Rule> {
+pub enum SetReason<'a> {
     /// Assumed when nothing can be deduced.
     ///
     /// The number is its position in the `search_list` of the world.
@@ -199,30 +192,13 @@ pub enum SetReason<'a, R: Rule> {
     Init,
 
     /// Deduced from the rule when constitifying another cell.
-    Rule(CellRef<'a, R>),
+    Rule(CellRef<'a>),
 
     /// Deduced from symmetry.
-    Sym(CellRef<'a, R>),
+    Sym(CellRef<'a>),
 
     /// Deduced from conflicts.
     Conflict,
-}
-
-impl<'a, R: Rule> SetReason<'a, R> {
-    pub(crate) fn cells(self, cell: CellRef<'a, R>) -> Vec<CellRef<'a, R>> {
-        match self {
-            SetReason::Rule(cell0) => cell0
-                .nbhd
-                .iter()
-                .filter_map(|&c| c)
-                .chain(once(cell0))
-                .chain(cell0.succ.into_iter())
-                .filter(|&c| c != cell && c.state.get().is_some())
-                .collect(),
-            SetReason::Sym(sym) => vec![sym],
-            _ => Vec::new(),
-        }
-    }
 }
 
 /// Reasons for a conflict.
@@ -234,12 +210,12 @@ impl<'a, R: Rule> SetReason<'a, R> {
     PartialEq(bound = ""),
     Eq(bound = "")
 )]
-pub enum ConflReason<'a, R: Rule> {
+pub enum ConflReason<'a> {
     /// Deduced from the rule when constitifying another cell.
-    Rule(CellRef<'a, R>),
+    Rule(CellRef<'a>),
 
     /// Deduced from symmetry.
-    Sym(CellRef<'a, R>, CellRef<'a, R>),
+    Sym(CellRef<'a>, CellRef<'a>),
 
     /// Deduced from another conflict.
     Conflict,
@@ -249,21 +225,4 @@ pub enum ConflReason<'a, R: Rule> {
 
     /// Not a conflict, but returning from a succeed.
     Succeed,
-}
-
-impl<'a, R: Rule> ConflReason<'a, R> {
-    pub(crate) fn cells(self) -> Vec<CellRef<'a, R>> {
-        match self {
-            ConflReason::Rule(cell) => cell
-                .nbhd
-                .iter()
-                .filter_map(|&c| c)
-                .chain(once(cell))
-                .chain(cell.succ.into_iter())
-                .filter(|&c| c.state.get().is_some())
-                .collect(),
-            ConflReason::Sym(cell, sym) => vec![cell, sym],
-            _ => Vec::new(),
-        }
-    }
 }
