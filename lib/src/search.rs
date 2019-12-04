@@ -133,21 +133,20 @@ impl<'a> World<'a> {
         if reason.is_empty() {
             return self.backup();
         }
-        let mut reason_cells = reason;
         let mut max_level = 0;
         let mut counter = 0;
-        loop {
-            for &cell in reason_cells.iter() {
-                let level = cell.level.get();
-                if level == Some(self.level) {
-                    if !cell.seen.get() {
-                        counter += 1;
-                        cell.seen.set(true);
-                    }
-                } else if level.is_some() && level.unwrap() > 0 {
-                    max_level = max_level.max(level.unwrap())
+        for cell in reason {
+            let level = cell.level.get();
+            if level == Some(self.level) {
+                if !cell.seen.get() {
+                    counter += 1;
+                    cell.seen.set(true);
                 }
+            } else if level.is_some() && level.unwrap() > 0 {
+                max_level = max_level.max(level.unwrap())
             }
+        }
+        loop {
             if let Some(cell) = self.set_stack.pop() {
                 let reason = cell.reason.get().unwrap();
                 match reason {
@@ -186,13 +185,22 @@ impl<'a> World<'a> {
                                     return self.backup();
                                 }
                             } else {
-                                reason_cells = reason.cells(cell);
+                                for cell in reason.cells(cell) {
+                                    let level = cell.level.get();
+                                    if level == Some(self.level) {
+                                        if !cell.seen.get() {
+                                            counter += 1;
+                                            cell.seen.set(true);
+                                        }
+                                    } else if level.is_some() && level.unwrap() > 0 {
+                                        max_level = max_level.max(level.unwrap())
+                                    }
+                                }
                                 if cell.level.get() == Some(self.level) {
                                     counter -= 1;
                                 }
                             }
                         } else {
-                            reason_cells.clear();
                             self.clear_cell(cell);
                         }
                     }
