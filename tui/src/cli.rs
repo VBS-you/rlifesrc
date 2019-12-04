@@ -20,7 +20,7 @@ pub struct Args<'a> {
 pub fn parse_args<'a>() -> Option<Args<'a>> {
     let app = App::new("rlifesrc")
         .about("Searching for patterns in Conway's Game of Life")
-        .version("0.1.0")
+        .version("0.2.0")
         .settings(&[AppSettings::AllowNegativeNumbers, AppSettings::ColoredHelp])
         .arg(
             Arg::with_name("X")
