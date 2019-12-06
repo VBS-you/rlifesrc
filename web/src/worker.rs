@@ -68,7 +68,7 @@ pub struct Step;
 impl Worker {
     fn update_world(&mut self, id: HandlerId, gen: isize) {
         let world = self.search.as_ref().unwrap().display_gen(gen);
-        let count = self.search.as_ref().unwrap().cell_count(gen);
+        let count = self.search.as_ref().unwrap().cell_count_gen(gen);
         self.link
             .response(id, Response::UpdateWorld((world, count)));
         self.update_status(id);
@@ -88,7 +88,7 @@ impl Agent for Worker {
 
     fn create(link: AgentLink<Self>) -> Self {
         let config: Config = Default::default();
-        let search = config.set_world().ok();
+        let search = config.world().ok();
 
         let status = Status::Paused;
         let job = Job::new(&link);
@@ -125,7 +125,7 @@ impl Agent for Worker {
             Request::SetWorld(config) => {
                 self.job.stop();
                 self.status = Status::Paused;
-                if let Ok(search) = config.set_world() {
+                if let Ok(search) = config.world() {
                     self.search.replace(search);
                     self.update_world(id, 0);
                 } else {

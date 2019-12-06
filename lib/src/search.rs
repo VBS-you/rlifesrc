@@ -301,7 +301,7 @@ impl<'a> World<'a> {
     pub fn set_max_cell_count(&mut self, max_cell_count: Option<usize>) {
         self.max_cell_count = max_cell_count;
         if let Some(max) = self.max_cell_count {
-            while *self.cell_count.iter().min().unwrap() > max {
+            while self.cell_count() > max {
                 if !self.backup() {
                     break;
                 }

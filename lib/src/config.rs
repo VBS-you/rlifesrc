@@ -4,7 +4,8 @@ use crate::{cells::State, world::World};
 use derivative::Derivative;
 use std::{
     cmp::Ordering,
-    fmt::{Debug, Error, Formatter},
+    error::Error,
+    fmt::{self, Debug, Formatter},
     str::FromStr,
 };
 
@@ -87,7 +88,7 @@ impl FromStr for Transform {
 }
 
 impl Debug for Transform {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         let s = match self {
             Transform::Id => "Id",
             Transform::Rotate90 => "R90",
@@ -197,7 +198,7 @@ impl FromStr for Symmetry {
 }
 
 impl Debug for Symmetry {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         let s = match self {
             Symmetry::C1 => "C1",
             Symmetry::C2 => "C2",
@@ -446,7 +447,7 @@ impl Config {
     /// After the last generation, the pattern will return to
     /// the first generation, applying the transformation first,
     /// and then the translation defined by `dx` and `dy`.
-    pub fn set_world<'a>(&self) -> Result<World<'a>, String> {
+    pub fn world<'a>(&self) -> Result<World<'a>, Box<dyn Error>> {
         World::new(self)
     }
 }

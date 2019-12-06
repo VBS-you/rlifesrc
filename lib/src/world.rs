@@ -6,6 +6,7 @@ use crate::{
     config::{Config, NewState, SearchOrder, Symmetry, Transform},
     rule::Rule,
 };
+use std::error::Error;
 
 /// The coordinates of a cell.
 ///
@@ -95,7 +96,7 @@ impl<'a> World<'a> {
     /// After the last generation, the pattern will return to
     /// the first generation, applying the transformation first,
     /// and then the translation defined by `dx` and `dy`.
-    pub fn new(config: &Config) -> Result<Self, String> {
+    pub fn new(config: &Config) -> Result<Self, Box<dyn Error>> {
         let rule = Rule::parse_rule(&config.rule_string)?;
         let search_order = config.auto_search_order();
 
@@ -551,9 +552,14 @@ impl<'a> World<'a> {
         self.period
     }
 
-    /// Number of known living cells in a generation.
-    pub fn cell_count(&self, t: isize) -> usize {
+    /// Number of known living cells in some generation.
+    pub fn cell_count_gen(&self, t: isize) -> usize {
         self.cell_count[t as usize]
+    }
+
+    /// Minimum number of known living cells in all generation.
+    pub fn cell_count(&self) -> usize {
+        *self.cell_count.iter().min().unwrap()
     }
 
     /// Number of conflicts during the search.
