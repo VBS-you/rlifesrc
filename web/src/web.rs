@@ -130,9 +130,11 @@ impl Component for Model {
             }
             Msg::Start => {
                 self.worker.send(Request::Start);
+                return false;
             }
             Msg::Pause => {
                 self.worker.send(Request::Pause);
+                return false;
             }
             Msg::IncGen => {
                 self.gen += 1;
@@ -197,6 +199,9 @@ impl Component for Model {
                     self.world = world;
                     self.cells = cells;
                 }
+                Response::UpdateConfig(config) => {
+                    self.config = config;
+                }
                 Response::UpdateStatus(status) => {
                     let old_status = self.status;
                     if self.status != status {
@@ -224,6 +229,7 @@ impl Component for Model {
             <div id="rlifesrc">
                 { self.header() }
                 { self.main() }
+                { self.footer() }
             </div>
         }
     }
@@ -252,6 +258,23 @@ impl Model {
                     </tr>
                 </table>
             </header>
+        }
+    }
+
+    fn footer(&self) -> Html<Self> {
+        html! {
+            <footer id="footer" class="mui-container-fluid">
+                <div class="mui--text-caption mui--text-center">
+                    { "Powered by " }
+                    <a href="https://yew.rs">
+                        { "Yew" }
+                    </a>
+                    { " & " }
+                    <a href="https://www.muicss.com">
+                        { "MUI CSS" }
+                    </a>
+                </div>
+            </footer>
         }
     }
 
@@ -327,7 +350,7 @@ impl Model {
         html! {
             <div id="buttons">
                 <button class="mui-btn mui-btn--raised"
-                    disabled={self.status == Status::Searching }
+                    disabled={ self.status == Status::Searching }
                     onclick=|_| Msg::Start>
                     <i class="fas fa-play"></i>
                     <span class="mui--hidden-xs">
@@ -335,7 +358,7 @@ impl Model {
                     </span>
                 </button>
                 <button class="mui-btn mui-btn--raised"
-                    disabled={self.status != Status::Searching }
+                    disabled={ self.status != Status::Searching }
                     onclick=|_| Msg::Pause>
                     <i class="fas fa-pause"></i>
                     <span class="mui--hidden-xs">
@@ -344,10 +367,10 @@ impl Model {
                 </button>
                 <button class="mui-btn mui-btn--raised"
                     onclick=|_| Msg::Reset>
-                    <i class="fas fa-redo"></i>
+                    <i class="fas fa-check"></i>
                     <span class="mui--hidden-xs">
-                        <abbr title="Apply the settings and restart.">
-                            { "Set World" }
+                        <abbr title="Apply the settings and restart the search.">
+                            { "Apply Settings" }
                         </abbr>
                     </span>
                 </button>

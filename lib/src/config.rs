@@ -9,7 +9,7 @@ use std::{
     str::FromStr,
 };
 
-#[cfg(feature = "stdweb")]
+#[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 
 /// Transformations (rotations and reflections) after the last generation.
@@ -30,9 +30,9 @@ use serde::{Deserialize, Serialize};
 /// The symbol after it is the axis of reflection.
 ///
 /// Some of the transformations are only valid when the world is square.
-#[derive(Clone, Copy, Derivative, PartialEq)]
+#[derive(Clone, Copy, Derivative, PartialEq, Eq)]
 #[derivative(Default)]
-#[cfg_attr(feature = "stdweb", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub enum Transform {
     /// `Id`.
     ///
@@ -128,9 +128,9 @@ impl Transform {
 /// [Logic Life Search](https://github.com/OscarCunningham/logic-life-search).
 ///
 /// Some of the symmetries are only valid when the world is square.
-#[derive(Clone, Copy, Derivative, PartialEq)]
+#[derive(Clone, Copy, Derivative, PartialEq, Eq)]
 #[derivative(Default)]
-#[cfg_attr(feature = "stdweb", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub enum Symmetry {
     /// `C1`.
     ///
@@ -236,8 +236,8 @@ impl Symmetry {
 ///
 /// It will always search all generations of a cell first,
 /// and the go to another cell.
-#[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "stdweb", derive(Serialize, Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub enum SearchOrder {
     /// Searches all cells of a row first,
     /// and the go to the next row.
@@ -261,10 +261,14 @@ pub enum SearchOrder {
 }
 
 /// How to choose a state for an unknown cell.
-#[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "stdweb", derive(Serialize, Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub enum NewState {
     /// Chooses the given state.
+    ///
+    /// For rules with `B0`, `Choose(Dead)` actually means
+    /// choosing the background, i.e., `Dead` in even generations,
+    /// `Alive` in odd generations.
     Choose(State),
     /// Random. The probability of either state is 1/2.
     Random,
@@ -279,9 +283,9 @@ impl Default for NewState {
 /// World configuration.
 ///
 /// The world will be generated from this configuration.
-#[derive(Clone, Debug, Derivative, PartialEq)]
+#[derive(Clone, Debug, Derivative, PartialEq, Eq)]
 #[derivative(Default)]
-#[cfg_attr(feature = "stdweb", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Config {
     /// Width.
     #[derivative(Default(value = "16"))]

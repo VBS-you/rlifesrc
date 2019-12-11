@@ -8,12 +8,12 @@ use crate::{
     world::World,
 };
 
-#[cfg(feature = "stdweb")]
+#[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 
 /// Search status.
-#[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "stdweb", derive(Serialize, Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub enum Status {
     /// A result is found.
     Found,
@@ -248,7 +248,7 @@ impl<'a> World<'a> {
     fn decide(&mut self) -> Option<Result<(), ConflReason<'a>>> {
         if let Some((i, cell)) = self.get_unknown(self.search_index) {
             self.search_index = i + 1;
-            let state = match self.new_state {
+            let state = match self.config.new_state {
                 NewState::Choose(State::Dead) => cell.background,
                 NewState::Choose(State::Alive) => !cell.background,
                 NewState::Random => rand::random(),
@@ -276,9 +276,8 @@ impl<'a> World<'a> {
                     return Status::None;
                 }
             } else if self.nontrivial() {
-                if self.reduce_max {
-                    let cell_count = *self.cell_count.iter().min().unwrap();
-                    self.max_cell_count = Some(cell_count - 1);
+                if self.config.reduce_max {
+                    self.config.max_cell_count = Some(self.cell_count() - 1);
                 }
                 return Status::Found;
             } else if !self.backup() {
@@ -299,8 +298,8 @@ impl<'a> World<'a> {
     /// Currently this is the only parameter that you can change
     /// during the search.
     pub fn set_max_cell_count(&mut self, max_cell_count: Option<usize>) {
-        self.max_cell_count = max_cell_count;
-        if let Some(max) = self.max_cell_count {
+        self.config.max_cell_count = max_cell_count;
+        if let Some(max) = self.config.max_cell_count {
             while self.cell_count() > max {
                 if !self.backup() {
                     break;

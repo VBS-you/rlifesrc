@@ -125,7 +125,7 @@ impl SearchWindow {
 }
 
 pub fn search_with_tui(mut search: World, reset: bool) {
-    let period = search.period();
+    let period = search.config().period;
     let mut search_win = SearchWindow::new();
     search_win.update(&search);
 

@@ -8,11 +8,12 @@ use rand::{
 use std::{
     cell::Cell,
     fmt::{Debug, Error, Formatter},
+    marker::PhantomData,
     ops::{Deref, Not},
 };
 pub use State::{Alive, Dead};
 
-#[cfg(feature = "stdweb")]
+#[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 
 /// Possible states of a known cell.
@@ -20,7 +21,7 @@ use serde::{Deserialize, Serialize};
 /// During the search, the state of a cell is represented by `Option<State>`,
 /// where `None` means that the state of the cell is unknown.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "stdweb", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub enum State {
     Alive = 0b01,
     Dead = 0b10,
@@ -50,12 +51,21 @@ impl Distribution<State> for Standard {
     }
 }
 
+/// The coordinates of a cell.
+///
+/// `(x-coordinate, y-coordinate, time)`.
+/// All three coordinates are 0-indexed.
+pub type Coord = (isize, isize, isize);
+
 /// A cell in the cellular automaton.
 ///
 /// The name `LifeCell` is chosen to avoid ambiguity with
 /// [`std::cell::Cell`](https://doc.rust-lang.org/std/cell/struct.Cell.html).
 pub struct LifeCell<'a> {
-    /// The background state of a cell.
+    /// The coordinates of a cell.
+    pub coord: Coord,
+
+    /// The background state of the cell.
     ///
     /// For rules without `B0`, it is always dead.
     /// For rules with `B0`, it is dead on even generations,
@@ -87,8 +97,6 @@ pub struct LifeCell<'a> {
     /// with this cell because of the symmetry.
     pub(crate) sym: Vec<CellRef<'a>>,
 
-    /// The generation of the cell.
-    pub(crate) gen: usize,
     /// Whether the cell is on the first row or column.
     ///
     /// Here the choice of row or column depends on the search order.
@@ -109,9 +117,10 @@ impl<'a> LifeCell<'a> {
     /// descriptor says that all neighboring cells also have the same state.
     ///
     /// `first_gen` and `first_col` are set to `false`.
-    pub(crate) fn new(background: State, b0: bool, gen: usize) -> Self {
+    pub(crate) fn new(coord: Coord, background: State, b0: bool) -> Self {
         let succ_state = if b0 { !background } else { background };
         LifeCell {
+            coord,
             background,
             state: Cell::new(Some(background)),
             desc: Cell::new(Desc::new(background, succ_state)),
@@ -119,7 +128,6 @@ impl<'a> LifeCell<'a> {
             succ: Default::default(),
             nbhd: Default::default(),
             sym: Default::default(),
-            gen,
             is_front: false,
             reason: Cell::new(None),
             level: Cell::new(None),
@@ -127,9 +135,12 @@ impl<'a> LifeCell<'a> {
         }
     }
 
-    pub(crate) unsafe fn to_ref(&self) -> CellRef<'a> {
-        let cell = (self as *const LifeCell<'a>).as_ref().unwrap();
-        CellRef { cell }
+    /// Returns a `CellRef` from a `LifeCell`.
+    pub(crate) fn borrow(&self) -> CellRef<'a> {
+        CellRef {
+            cell: self as *const LifeCell<'a>,
+            phantom: PhantomData,
+        }
     }
 }
 
@@ -137,37 +148,31 @@ impl<'a> Debug for LifeCell<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(
             f,
-            "LifeCell {{ state: {:?}, desc: {:?} }}",
+            "LifeCell {{ coord: {:?}, state: {:?}, desc: {:?} }}",
+            self.coord,
             self.state.get(),
             self.desc.get()
         )
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CellRef<'a> {
-    cell: &'a LifeCell<'a>,
+    cell: *const LifeCell<'a>,
+    phantom: PhantomData<&'a LifeCell<'a>>,
 }
 
 impl<'a> Deref for CellRef<'a> {
     type Target = LifeCell<'a>;
 
     fn deref(&self) -> &Self::Target {
-        self.cell
+        unsafe { self.cell.as_ref().unwrap() }
     }
 }
-
-impl<'a> PartialEq for CellRef<'a> {
-    fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self.cell, other.cell)
-    }
-}
-
-impl<'a> Eq for CellRef<'a> {}
 
 impl<'a> Debug for CellRef<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "CellRef {{ cell: {:?} }}", self.cell)
+        write!(f, "CellRef {{ coord: {:?} }}", self.coord)
     }
 }
 

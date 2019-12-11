@@ -1,76 +1,84 @@
 use rlifesrc_lib::{Config, Status, Symmetry, Transform};
+use std::error::Error;
 
 #[test]
-fn default() {
-    let config = Config::default();
-    let mut search = config.world().unwrap();
+fn default() -> Result<(), Box<dyn Error>> {
+    let mut search = Config::default().world()?;
     assert_eq!(search.search(None), Status::Found);
+    Ok(())
 }
 
 #[test]
-fn not_found() {
+fn not_found() -> Result<(), Box<dyn Error>> {
     let config = Config::new(5, 5, 3);
-    let mut search = config.world().unwrap();
+    let mut search = config.world()?;
     assert_eq!(search.search(None), Status::None);
+    Ok(())
 }
 
 #[test]
-fn max_cell_count() {
+fn max_cell_count() -> Result<(), Box<dyn Error>> {
     let config = Config::new(5, 5, 1).set_max_cell_count(Some(5));
-    let mut search = config.world().unwrap();
+    let mut search = config.world()?;
     assert_eq!(search.search(None), Status::Found);
     search.set_max_cell_count(Some(3));
     assert_eq!(search.search(None), Status::None);
+    Ok(())
 }
 
 #[test]
-fn reduce_max() {
+fn reduce_max() -> Result<(), Box<dyn Error>> {
     let config = Config::new(5, 5, 1)
         .set_max_cell_count(Some(5))
         .set_reduce_max(true);
-    let mut search = config.world().unwrap();
+    let mut search = config.world()?;
     assert_eq!(search.search(None), Status::Found);
     assert_eq!(search.search(None), Status::None);
+    Ok(())
 }
 
 #[test]
-fn p3_spaceship() {
+fn p3_spaceship() -> Result<(), Box<dyn Error>> {
     let config = Config::new(16, 5, 3).set_translate(0, 1);
-    let mut search = config.world().unwrap();
+    let mut search = config.world()?;
     assert_eq!(search.search(None), Status::Found);
-    // assert_eq!(
-    //     search.display_gen(0),
-    //     String::from(
-    //         "........O.......\n\
-    //          .OO.OOO.OOO.....\n\
-    //          .OO....O..OO.OO.\n\
-    //          O..O.OO...O..OO.\n\
-    //          ............O..O\n"
-    //     )
-    // );
+    assert_eq!(
+        search.display_gen(0),
+        String::from(
+            "........O.......\n\
+             .OO.OOO.OOO.....\n\
+             .OO....O..OO.OO.\n\
+             O..O.OO...O..OO.\n\
+             ............O..O\n"
+        )
+    );
+    Ok(())
 }
 
 #[test]
-fn lwss() {
+fn lwss() -> Result<(), Box<dyn Error>> {
     let config = Config::new(6, 6, 4).set_translate(0, 2);
-    let mut search = config.world().unwrap();
+    let mut search = config.world()?;
     assert_eq!(search.search(None), Status::Found);
+    Ok(())
 }
 
 #[test]
-fn lwss_flip() {
+fn lwss_flip() -> Result<(), Box<dyn Error>> {
     let config = Config::new(5, 5, 2)
         .set_translate(0, 1)
         .set_transform(Transform::FlipCol);
-    let mut search = config.world().unwrap();
+    let mut search = config.world()?;
     assert_eq!(search.search(None), Status::Found);
+    Ok(())
 }
 
 #[test]
-fn turtle() {
+fn turtle() -> Result<(), Box<dyn Error>> {
     let config = Config::new(12, 13, 3)
         .set_translate(0, 1)
         .set_symmetry(Symmetry::D2Col);
-    let mut search = config.world().unwrap();
+    let mut search = config.world()?;
     assert_eq!(search.search(None), Status::Found);
+    Ok(())
 }

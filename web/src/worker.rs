@@ -60,6 +60,7 @@ pub enum Request {
 pub enum Response {
     UpdateWorld((String, usize)),
     UpdateStatus(Status),
+    UpdateConfig(Config),
     InvalidRule,
 }
 
@@ -76,6 +77,12 @@ impl Worker {
 
     fn update_status(&mut self, id: HandlerId) {
         let status = self.status;
+        if Status::Found == status && self.search.as_ref().unwrap().config().reduce_max {
+            self.link.response(
+                id,
+                Response::UpdateConfig(self.search.as_ref().unwrap().config().clone()),
+            );
+        }
         self.link.response(id, Response::UpdateStatus(status));
     }
 }

@@ -1,38 +1,29 @@
 //! The world.
 
 use crate::{
-    cells::{Alive, CellRef, ConflReason, Dead, LifeCell, SetReason, State},
+    cells::{Alive, CellRef, ConflReason, Coord, Dead, LifeCell, SetReason, State},
     // clause::Clause,
-    config::{Config, NewState, SearchOrder, Symmetry, Transform},
+    config::{Config, SearchOrder, Symmetry, Transform},
     rule::Rule,
 };
 use std::error::Error;
 
-/// The coordinates of a cell.
-///
-/// `(x-coordinate, y-coordinate, time)`.
-/// All three coordinates are 0-indexed.
-pub type Coord = (isize, isize, isize);
-
 /// The world.
 pub struct World<'a> {
-    /// Width.
-    pub(crate) width: isize,
-    /// Height.
-    pub(crate) height: isize,
-    /// Period.
-    pub(crate) period: isize,
+    /// World configuration.
+    pub(crate) config: Config,
+
     /// The rule of the cellular automaton.
     pub(crate) rule: Rule,
 
     /// A vector that stores all the cells in the search range.
     ///
-    /// The vector will not be moved after it is created.
+    /// This vector will not be moved after its creation.
     /// All the cells will live throughout the lifetime of the world.
     // So the unsafe code below is actually safe.
     cells: Vec<LifeCell<'a>>,
 
-    /// A list of references of cells sorted by the search order.search
+    /// A list of references to cells sorted by the search order.
     ///
     /// Used to find unknown cells.
     search_list: Vec<CellRef<'a>>,
@@ -40,18 +31,15 @@ pub struct World<'a> {
     /// Number of known living cells in each generation.
     pub(crate) cell_count: Vec<usize>,
 
-    /// Number of unknown or living cells in the front.
+    /// Number of unknown or living cells on the first row or column.
     pub(crate) front_cell_count: usize,
 
     /// Number of conflicts during the search.
     pub(crate) conflicts: u64,
 
-    /// How to choose a state for an unknown cell.
-    pub(crate) new_state: NewState,
-
-    /// A stack to records the cells whose values are set during the search.
+    /// A stack to record the cells whose values are set during the search.
     ///
-    /// The cells in this table always have known states.
+    /// The cells in this stack always have known states.
     ///
     /// It is used in the backtracking.
     pub(crate) set_stack: Vec<CellRef<'a>>,
@@ -61,29 +49,13 @@ pub struct World<'a> {
     /// See `proceed` for details.
     pub(crate) check_index: usize,
 
-    /// The position in the `search_list` of the last decided cell.
+    /// The starting position in the `search_list` to look for an unknown cell.
+    ///
+    /// Cells before this position are all known.
     pub(crate) search_index: usize,
-
-    /// The number of minimum living cells in all generations must not
-    /// exceed this number.
-    ///
-    /// `None` means that there is no limit for the cell count.
-    pub(crate) max_cell_count: Option<usize>,
-
-    /// Whether to force the first row/column to be nonempty.
-    ///
-    /// Here 'front' means the first row or column to search,
-    /// according to the search order.
-    pub(crate) non_empty_front: bool,
 
     /// The global decision level for assigning the cell state.
     pub(crate) level: usize,
-    /// Whether to automatically reduce the `max_cell_count`
-    /// when a result is found.
-    ///
-    /// The `max_cell_count` will be set to the cell count of
-    /// the current result minus one.
-    pub(crate) reduce_max: bool,
 }
 
 impl<'a> World<'a> {
@@ -123,14 +95,16 @@ impl<'a> World<'a> {
             _ => front_gen0,
         };
 
-        // Fills the vector with dead cells.
+        // Fills the vector with dead cells,
+        // and checks whether it is on the first row or column.
+        //
         // If the rule contains `B0`, then fills the odd generations
         // with living cells instead.
         for x in -1..=config.width {
             for y in -1..=config.height {
                 for t in 0..config.period {
                     let state = if rule.b0 && t % 2 == 1 { Alive } else { Dead };
-                    let mut cell = LifeCell::new(state, rule.b0, t as usize);
+                    let mut cell = LifeCell::new((x, y, t), state, rule.b0);
                     match search_order {
                         SearchOrder::ColumnFirst => {
                             if front_gen0 {
@@ -163,23 +137,17 @@ impl<'a> World<'a> {
         }
 
         let world = World {
-            width: config.width,
-            height: config.height,
-            period: config.period,
+            config: config.clone(),
             rule,
             cells,
             search_list: Vec::with_capacity(size),
             cell_count: vec![0; config.period as usize],
             front_cell_count: 0,
             conflicts: 0,
-            new_state: config.new_state,
             set_stack: Vec::with_capacity(size),
             check_index: 0,
             search_index: 0,
-            max_cell_count: config.max_cell_count,
-            non_empty_front: config.non_empty_front,
             level: 0,
-            reduce_max: config.reduce_max,
         }
         .init_nbhd()
         .init_pred_succ(config.dx, config.dy, config.transform)
@@ -204,9 +172,9 @@ impl<'a> World<'a> {
             (1, 0),
             (1, 1),
         ];
-        for x in -1..=self.width {
-            for y in -1..=self.height {
-                for t in 0..self.period {
+        for x in -1..=self.config.width {
+            for y in -1..=self.config.height {
+                for t in 0..self.config.period {
                     let cell_ptr = self.find_cell_mut((x, y, t)).unwrap();
                     for (i, (nx, ny)) in NBHD.iter().enumerate() {
                         unsafe {
@@ -223,14 +191,14 @@ impl<'a> World<'a> {
     /// Links a cell to its predecessor and successor.
     ///
     /// If the predecessor is out of the search range,
-    /// then sets the state of the current cell to `default`.
+    /// then marks the current cell as known.
     ///
     /// If the successor is out of the search range,
     /// then sets it to `None`.
     fn init_pred_succ(mut self, dx: isize, dy: isize, transform: Transform) -> Self {
-        for x in -1..=self.width {
-            for y in -1..=self.height {
-                for t in 0..self.period {
+        for x in -1..=self.config.width {
+            for y in -1..=self.config.height {
+                for t in 0..self.config.period {
                     let cell_ptr = self.find_cell_mut((x, y, t)).unwrap();
                     let cell = self.find_cell((x, y, t)).unwrap();
 
@@ -242,31 +210,35 @@ impl<'a> World<'a> {
                     } else {
                         let (new_x, new_y) = match transform {
                             Transform::Id => (x, y),
-                            Transform::Rotate90 => (self.height - 1 - y, x),
-                            Transform::Rotate180 => (self.width - 1 - x, self.height - 1 - y),
-                            Transform::Rotate270 => (y, self.width - 1 - x),
-                            Transform::FlipRow => (x, self.height - 1 - y),
-                            Transform::FlipCol => (self.width - 1 - x, y),
+                            Transform::Rotate90 => (self.config.height - 1 - y, x),
+                            Transform::Rotate180 => {
+                                (self.config.width - 1 - x, self.config.height - 1 - y)
+                            }
+                            Transform::Rotate270 => (y, self.config.width - 1 - x),
+                            Transform::FlipRow => (x, self.config.height - 1 - y),
+                            Transform::FlipCol => (self.config.width - 1 - x, y),
                             Transform::FlipDiag => (y, x),
-                            Transform::FlipAntidiag => (self.height - 1 - y, self.width - 1 - x),
+                            Transform::FlipAntidiag => {
+                                (self.config.height - 1 - y, self.config.width - 1 - x)
+                            }
                         };
-                        let pred = self.find_cell((new_x - dx, new_y - dy, self.period - 1));
+                        let pred = self.find_cell((new_x - dx, new_y - dy, self.config.period - 1));
                         if pred.is_some() {
                             unsafe {
                                 let cell = cell_ptr.as_mut().unwrap();
                                 cell.pred = pred;
                             }
                         } else if 0 <= x
-                            && x < self.width
+                            && x < self.config.width
                             && 0 <= y
-                            && y < self.height
+                            && y < self.config.height
                             && cell.reason.get().is_none()
                         {
                             cell.reason.set(Some(SetReason::Init));
                         }
                     }
 
-                    if t != self.period - 1 {
+                    if t != self.config.period - 1 {
                         unsafe {
                             let cell = cell_ptr.as_mut().unwrap();
                             cell.succ = self.find_cell((x, y, t + 1));
@@ -275,13 +247,17 @@ impl<'a> World<'a> {
                         let (x, y) = (x + dx, y + dy);
                         let (new_x, new_y) = match transform {
                             Transform::Id => (x, y),
-                            Transform::Rotate90 => (y, self.width - 1 - x),
-                            Transform::Rotate180 => (self.width - 1 - x, self.height - 1 - y),
-                            Transform::Rotate270 => (self.height - 1 - y, x),
-                            Transform::FlipRow => (x, self.height - 1 - y),
-                            Transform::FlipCol => (self.width - 1 - x, y),
+                            Transform::Rotate90 => (y, self.config.width - 1 - x),
+                            Transform::Rotate180 => {
+                                (self.config.width - 1 - x, self.config.height - 1 - y)
+                            }
+                            Transform::Rotate270 => (self.config.height - 1 - y, x),
+                            Transform::FlipRow => (x, self.config.height - 1 - y),
+                            Transform::FlipCol => (self.config.width - 1 - x, y),
                             Transform::FlipDiag => (y, x),
-                            Transform::FlipAntidiag => (self.height - 1 - y, self.width - 1 - x),
+                            Transform::FlipAntidiag => {
+                                (self.config.height - 1 - y, self.config.width - 1 - x)
+                            }
                         };
                         unsafe {
                             let cell = cell_ptr.as_mut().unwrap();
@@ -297,60 +273,64 @@ impl<'a> World<'a> {
     /// Links a cell to the symmetric cells.
     ///
     /// If some symmetric cell is out of the search range,
-    /// then sets the current cell to `default`.
+    /// then  marks the current cell as known.
     fn init_sym(mut self, symmetry: Symmetry) -> Self {
-        for x in -1..=self.width {
-            for y in -1..=self.height {
-                for t in 0..self.period {
+        for x in -1..=self.config.width {
+            for y in -1..=self.config.height {
+                for t in 0..self.config.period {
                     let cell_ptr = self.find_cell_mut((x, y, t)).unwrap();
                     let cell = self.find_cell((x, y, t)).unwrap();
 
                     let sym_coords = match symmetry {
                         Symmetry::C1 => vec![],
-                        Symmetry::C2 => vec![(self.width - 1 - x, self.height - 1 - y, t)],
+                        Symmetry::C2 => {
+                            vec![(self.config.width - 1 - x, self.config.height - 1 - y, t)]
+                        }
                         Symmetry::C4 => vec![
-                            (y, self.width - 1 - x, t),
-                            (self.width - 1 - x, self.height - 1 - y, t),
-                            (self.height - 1 - y, x, t),
+                            (y, self.config.width - 1 - x, t),
+                            (self.config.width - 1 - x, self.config.height - 1 - y, t),
+                            (self.config.height - 1 - y, x, t),
                         ],
-                        Symmetry::D2Row => vec![(x, self.height - 1 - y, t)],
-                        Symmetry::D2Col => vec![(self.width - 1 - x, y, t)],
+                        Symmetry::D2Row => vec![(x, self.config.height - 1 - y, t)],
+                        Symmetry::D2Col => vec![(self.config.width - 1 - x, y, t)],
                         Symmetry::D2Diag => vec![(y, x, t)],
-                        Symmetry::D2Antidiag => vec![(self.height - 1 - y, self.width - 1 - x, t)],
+                        Symmetry::D2Antidiag => {
+                            vec![(self.config.height - 1 - y, self.config.width - 1 - x, t)]
+                        }
                         Symmetry::D4Ortho => vec![
-                            (self.width - 1 - x, y, t),
-                            (x, self.height - 1 - y, t),
-                            (self.width - 1 - x, self.height - 1 - y, t),
+                            (self.config.width - 1 - x, y, t),
+                            (x, self.config.height - 1 - y, t),
+                            (self.config.width - 1 - x, self.config.height - 1 - y, t),
                         ],
                         Symmetry::D4Diag => vec![
                             (y, x, t),
-                            (self.height - 1 - y, self.width - 1 - x, t),
-                            (self.width - 1 - x, self.height - 1 - y, t),
+                            (self.config.height - 1 - y, self.config.width - 1 - x, t),
+                            (self.config.width - 1 - x, self.config.height - 1 - y, t),
                         ],
                         Symmetry::D8 => vec![
-                            (y, self.width - 1 - x, t),
-                            (self.height - 1 - y, x, t),
-                            (self.width - 1 - x, y, t),
-                            (x, self.height - 1 - y, t),
+                            (y, self.config.width - 1 - x, t),
+                            (self.config.height - 1 - y, x, t),
+                            (self.config.width - 1 - x, y, t),
+                            (x, self.config.height - 1 - y, t),
                             (y, x, t),
-                            (self.height - 1 - y, self.width - 1 - x, t),
-                            (self.width - 1 - x, self.height - 1 - y, t),
+                            (self.config.height - 1 - y, self.config.width - 1 - x, t),
+                            (self.config.width - 1 - x, self.config.height - 1 - y, t),
                         ],
                     };
                     for coord in sym_coords {
                         if 0 <= coord.0
-                            && coord.0 < self.width
+                            && coord.0 < self.config.width
                             && 0 <= coord.1
-                            && coord.1 < self.height
+                            && coord.1 < self.config.height
                         {
                             unsafe {
                                 let cell = cell_ptr.as_mut().unwrap();
                                 cell.sym.push(self.find_cell(coord).unwrap());
                             }
                         } else if 0 <= x
-                            && x < self.width
+                            && x < self.config.width
                             && 0 <= y
-                            && y < self.height
+                            && y < self.config.height
                             && cell.reason.get().is_none()
                         {
                             cell.reason.set(Some(SetReason::Init));
@@ -363,15 +343,18 @@ impl<'a> World<'a> {
     }
 
     /// Sets states for the cells.
+    ///
+    /// All cells are set to unknown unless they are on the boundary,
+    /// or are marked as known in `init_pred_succ` or `init_sym`.
     fn init_state(mut self) -> Self {
-        for x in -1..=self.width {
-            for y in -1..=self.height {
-                for t in 0..self.period {
+        for x in -1..=self.config.width {
+            for y in -1..=self.config.height {
+                for t in 0..self.config.period {
                     let cell = self.find_cell((x, y, t)).unwrap();
                     if 0 <= x
-                        && x < self.width
+                        && x < self.config.width
                         && 0 <= y
-                        && y < self.height
+                        && y < self.config.height
                         && cell.reason.get().is_none()
                     {
                         self.clear_cell(cell);
@@ -386,14 +369,12 @@ impl<'a> World<'a> {
     }
 
     /// Sets the search order.
-    ///
-    /// This method will be called only once, inside `World::new`.
     fn init_search_order(mut self, search_order: SearchOrder) -> Self {
         match search_order {
             SearchOrder::ColumnFirst => {
-                for x in 0..self.width {
-                    for y in 0..self.height {
-                        for t in 0..self.period {
+                for x in 0..self.config.width {
+                    for y in 0..self.config.height {
+                        for t in 0..self.config.period {
                             let cell = self.find_cell((x, y, t)).unwrap();
                             self.search_list.push(cell);
                         }
@@ -401,9 +382,9 @@ impl<'a> World<'a> {
                 }
             }
             SearchOrder::RowFirst => {
-                for y in 0..self.height {
-                    for x in 0..self.width {
-                        for t in 0..self.period {
+                for y in 0..self.config.height {
+                    for x in 0..self.config.width {
+                        for t in 0..self.config.period {
                             let cell = self.find_cell((x, y, t)).unwrap();
                             self.search_list.push(cell);
                         }
@@ -414,14 +395,13 @@ impl<'a> World<'a> {
         self
     }
 
-    /// Finds a cell by its coordinates. Returns a reference that lives
-    /// as long as the world.
-    fn find_cell(&self, coord: Coord) -> Option<CellRef<'a>> {
+    /// Finds a cell by its coordinates. Returns a `CellRef`.
+    pub(crate) fn find_cell(&self, coord: Coord) -> Option<CellRef<'a>> {
         let (x, y, t) = coord;
-        if x >= -1 && x <= self.width && y >= -1 && y <= self.height {
-            let index = ((x + 1) * (self.height + 2) + y + 1) * self.period + t;
+        if x >= -1 && x <= self.config.width && y >= -1 && y <= self.config.height {
+            let index = ((x + 1) * (self.config.height + 2) + y + 1) * self.config.period + t;
             let cell = &self.cells[index as usize];
-            unsafe { Some(cell.to_ref()) }
+            Some(cell.borrow())
         } else {
             None
         }
@@ -430,8 +410,8 @@ impl<'a> World<'a> {
     /// Finds a cell by its coordinates. Returns a mutable pointer.
     fn find_cell_mut(&mut self, coord: Coord) -> Option<*mut LifeCell<'a>> {
         let (x, y, t) = coord;
-        if x >= -1 && x <= self.width && y >= -1 && y <= self.height {
-            let index = ((x + 1) * (self.height + 2) + y + 1) * self.period + t;
+        if x >= -1 && x <= self.config.width && y >= -1 && y <= self.config.height {
+            let index = ((x + 1) * (self.config.height + 2) + y + 1) * self.config.period + t;
             Some(&mut self.cells[index as usize])
         } else {
             None
@@ -455,8 +435,8 @@ impl<'a> World<'a> {
         let mut result = Ok(());
         cell.update_desc(None, Some(state));
         if let Alive = state {
-            self.cell_count[cell.gen] += 1;
-            if let Some(max) = self.max_cell_count {
+            self.cell_count[cell.coord.2 as usize] += 1;
+            if let Some(max) = self.config.max_cell_count {
                 if *self.cell_count.iter().min().unwrap() > max {
                     result = Err(ConflReason::CellCount);
                 }
@@ -464,7 +444,7 @@ impl<'a> World<'a> {
         }
         if cell.is_front && state == Dead {
             self.front_cell_count -= 1;
-            if self.non_empty_front && self.front_cell_count == 0 {
+            if self.config.non_empty_front && self.front_cell_count == 0 {
                 result = Err(ConflReason::CellCount);
             }
         }
@@ -485,7 +465,7 @@ impl<'a> World<'a> {
         if old_state != None {
             cell.update_desc(old_state, None);
             if old_state == Some(Alive) {
-                self.cell_count[cell.gen] -= 1;
+                self.cell_count[cell.coord.2 as usize] -= 1;
             }
             if cell.is_front && old_state == Some(Dead) {
                 self.front_cell_count += 1;
@@ -504,9 +484,9 @@ impl<'a> World<'a> {
     /// * **Unknown** cells are represented by `?`.
     pub fn display_gen(&self, t: isize) -> String {
         let mut str = String::new();
-        let t = t % self.period;
-        for y in 0..self.height {
-            for x in 0..self.width {
+        let t = t % self.config.period;
+        for y in 0..self.config.height {
+            for x in 0..self.config.width {
                 let state = self.find_cell((x, y, t)).unwrap().state.get();
                 let s = match state {
                     Some(Dead) => '.',
@@ -538,18 +518,18 @@ impl<'a> World<'a> {
     /// and whether the minimal period of the pattern equals to the given period.
     pub(crate) fn nontrivial(&self) -> bool {
         self.cell_count[0] > 0
-            && (1..self.period).all(|t| {
-                self.period % t != 0
+            && (1..self.config.period).all(|t| {
+                self.config.period % t != 0
                     || self
                         .cells
-                        .chunks(self.period as usize)
+                        .chunks(self.config.period as usize)
                         .any(|c| c[0].state.get() != c[t as usize].state.get())
             })
     }
 
-    /// Period of the pattern.
-    pub fn period(&self) -> isize {
-        self.period
+    /// World configuration.
+    pub fn config(&self) -> &Config {
+        &self.config
     }
 
     /// Number of known living cells in some generation.
