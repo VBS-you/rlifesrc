@@ -8,7 +8,6 @@ use rand::{
 use std::{
     cell::Cell,
     fmt::{Debug, Error, Formatter},
-    marker::PhantomData,
     ops::{Deref, Not},
 };
 pub use State::{Alive, Dead};
@@ -137,10 +136,8 @@ impl<'a> LifeCell<'a> {
 
     /// Returns a `CellRef` from a `LifeCell`.
     pub(crate) fn borrow(&self) -> CellRef<'a> {
-        CellRef {
-            cell: self as *const LifeCell<'a>,
-            phantom: PhantomData,
-        }
+        let cell = unsafe { (self as *const LifeCell<'a>).as_ref().unwrap() };
+        CellRef { cell }
     }
 }
 
@@ -156,17 +153,24 @@ impl<'a> Debug for LifeCell<'a> {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub(crate) struct CellRef<'a> {
-    cell: *const LifeCell<'a>,
-    phantom: PhantomData<&'a LifeCell<'a>>,
+    cell: &'a LifeCell<'a>,
 }
+
+impl<'a> PartialEq for CellRef<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self.cell, other.cell)
+    }
+}
+
+impl<'a> Eq for CellRef<'a> {}
 
 impl<'a> Deref for CellRef<'a> {
     type Target = LifeCell<'a>;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { self.cell.as_ref().unwrap() }
+        self.cell
     }
 }
 
