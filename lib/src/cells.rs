@@ -61,6 +61,9 @@ pub type Coord = (isize, isize, isize);
 /// The name `LifeCell` is chosen to avoid ambiguity with
 /// [`std::cell::Cell`](https://doc.rust-lang.org/std/cell/struct.Cell.html).
 pub struct LifeCell<'a> {
+    /// The index of the cell in the world.
+    pub(crate) id: usize,
+
     /// The coordinates of a cell.
     pub coord: Coord,
 
@@ -101,9 +104,6 @@ pub struct LifeCell<'a> {
     /// Here the choice of row or column depends on the search order.
     pub(crate) is_front: bool,
 
-    /// Reason for setting the state of the cell.
-    pub(crate) reason: Cell<Option<SetReason<'a>>>,
-
     /// The decision level for assigning the cell state.
     pub(crate) level: Cell<Option<usize>>,
 
@@ -116,9 +116,10 @@ impl<'a> LifeCell<'a> {
     /// descriptor says that all neighboring cells also have the same state.
     ///
     /// `first_gen` and `first_col` are set to `false`.
-    pub(crate) fn new(coord: Coord, background: State, b0: bool) -> Self {
+    pub(crate) fn new(id: usize, coord: Coord, background: State, b0: bool) -> Self {
         let succ_state = if b0 { !background } else { background };
         LifeCell {
+            id,
             coord,
             background,
             state: Cell::new(Some(background)),
@@ -128,7 +129,6 @@ impl<'a> LifeCell<'a> {
             nbhd: Default::default(),
             sym: Default::default(),
             is_front: false,
-            reason: Cell::new(None),
             level: Cell::new(None),
             seen: Cell::new(false),
         }
@@ -178,38 +178,4 @@ impl<'a> Debug for CellRef<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "CellRef {{ coord: {:?} }}", self.coord)
     }
-}
-
-/// Reasons for setting a cell.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SetReason<'a> {
-    /// Assumed when nothing can be deduced.
-    ///
-    /// The number is its position in the `search_list` of the world.
-    Assume(usize),
-
-    /// Deduced during the initialization.
-    Init,
-
-    /// Deduced from the rule when constitifying another cell.
-    Rule(CellRef<'a>),
-
-    /// Deduced from symmetry.
-    Sym(CellRef<'a>),
-
-    /// Deduced from conflicts.
-    Conflict,
-}
-
-/// Reasons for a conflict.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ConflReason<'a> {
-    /// Deduced from the rule when constitifying another cell.
-    Rule(CellRef<'a>),
-
-    /// Deduced from symmetry.
-    Sym(CellRef<'a>, CellRef<'a>),
-
-    /// Deduced from conditions about cell counts.
-    CellCount,
 }

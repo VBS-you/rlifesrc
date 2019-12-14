@@ -1,8 +1,8 @@
 //! The world.
 
 use crate::{
-    cells::{Alive, CellRef, ConflReason, Coord, Dead, LifeCell, SetReason, State},
-    // clause::Clause,
+    cells::{Alive, CellRef, Coord, Dead, LifeCell, State},
+    clause::{ConflReason, SetReason},
     config::{Config, SearchOrder, Symmetry, Transform},
     rule::Rule,
 };
@@ -22,6 +22,9 @@ pub struct World<'a> {
     /// All the cells will live throughout the lifetime of the world.
     // So the unsafe code below is actually safe.
     cells: Vec<LifeCell<'a>>,
+
+    /// Reason for setting the state of a cell.
+    pub(crate) reasons: Vec<Option<SetReason<'a>>>,
 
     /// A list of references to cells sorted by the search order.
     ///
@@ -74,6 +77,7 @@ impl<'a> World<'a> {
 
         let size = ((config.width + 2) * (config.height + 2) * config.period) as usize;
         let mut cells = Vec::with_capacity(size);
+        let reasons = vec![None; size];
 
         // Whether to consider only the first generation of the front.
         let front_gen0 = match search_order {
@@ -100,11 +104,12 @@ impl<'a> World<'a> {
         //
         // If the rule contains `B0`, then fills the odd generations
         // with living cells instead.
+        let mut id = 0;
         for x in -1..=config.width {
             for y in -1..=config.height {
                 for t in 0..config.period {
                     let state = if rule.b0 && t % 2 == 1 { Alive } else { Dead };
-                    let mut cell = LifeCell::new((x, y, t), state, rule.b0);
+                    let mut cell = LifeCell::new(id, (x, y, t), state, rule.b0);
                     match search_order {
                         SearchOrder::ColumnFirst => {
                             if front_gen0 {
@@ -132,6 +137,7 @@ impl<'a> World<'a> {
                         }
                     }
                     cells.push(cell);
+                    id += 1;
                 }
             }
         }
@@ -140,6 +146,7 @@ impl<'a> World<'a> {
             config: config.clone(),
             rule,
             cells,
+            reasons,
             search_list: Vec::with_capacity(size),
             cell_count: vec![0; config.period as usize],
             front_cell_count: 0,
@@ -232,9 +239,9 @@ impl<'a> World<'a> {
                             && x < self.config.width
                             && 0 <= y
                             && y < self.config.height
-                            && cell.reason.get().is_none()
+                            && self.reasons[cell.id].is_none()
                         {
-                            cell.reason.set(Some(SetReason::Init));
+                            self.reasons[cell.id] = Some(SetReason::Init);
                         }
                     }
 
@@ -331,9 +338,9 @@ impl<'a> World<'a> {
                             && x < self.config.width
                             && 0 <= y
                             && y < self.config.height
-                            && cell.reason.get().is_none()
+                            && self.reasons[cell.id].is_none()
                         {
-                            cell.reason.set(Some(SetReason::Init));
+                            self.reasons[cell.id] = Some(SetReason::Init);
                         }
                     }
                 }
@@ -355,11 +362,11 @@ impl<'a> World<'a> {
                         && x < self.config.width
                         && 0 <= y
                         && y < self.config.height
-                        && cell.reason.get().is_none()
+                        && self.reasons[cell.id].is_none()
                     {
                         self.clear_cell(cell);
                     } else {
-                        cell.reason.set(Some(SetReason::Init));
+                        self.reasons[cell.id] = Some(SetReason::Init);
                         self.set_stack.push(cell);
                     }
                 }
@@ -448,10 +455,10 @@ impl<'a> World<'a> {
                 result = Err(ConflReason::CellCount);
             }
         }
-        cell.reason.set(Some(reason));
         if let SetReason::Assume(_) = reason {
             self.level += 1;
         }
+        self.reasons[cell.id] = Some(reason);
         cell.level.set(Some(self.level));
         self.set_stack.push(cell);
         result
@@ -471,10 +478,10 @@ impl<'a> World<'a> {
                 self.front_cell_count += 1;
             }
         }
-        if let Some(SetReason::Assume(_)) = cell.reason.get() {
+        if let Some(SetReason::Assume(_)) = self.reasons[cell.id] {
             self.level -= 1;
         }
-        cell.reason.take()
+        self.reasons[cell.id].take()
     }
 
     /// Displays the whole world in some generation.

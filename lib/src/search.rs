@@ -1,8 +1,8 @@
 //! The search process.
 
 use crate::{
-    cells::{CellRef, ConflReason, SetReason, State},
-    // clause::Clause,
+    cells::{CellRef, State},
+    clause::{ConflReason, SetReason},
     config::NewState,
     rule::Rule,
     world::World,
@@ -87,7 +87,7 @@ impl<'a> World<'a> {
     /// Returns `None` if it goes back to the time before the first cell is set.
     fn cancel(&mut self) -> Option<(CellRef<'a>, State)> {
         while let Some(cell) = self.set_stack.pop() {
-            match cell.reason.get() {
+            match self.reasons[cell.id] {
                 Some(SetReason::Assume(i)) => {
                     self.check_index = self.set_stack.len();
                     self.search_index = i + 1;
@@ -134,6 +134,7 @@ impl<'a> World<'a> {
             return self.backup();
         }
         let mut max_level = 0;
+        let mut learnt = Vec::new();
         let mut counter = 0;
         for cell in reason {
             let level = cell.level.get();
@@ -143,12 +144,15 @@ impl<'a> World<'a> {
                     cell.seen.set(true);
                 }
             } else if level.is_some() && level.unwrap() > 0 {
-                max_level = max_level.max(level.unwrap())
+                max_level = max_level.max(level.unwrap());
+                if !learnt.contains(&cell) {
+                    learnt.push(cell);
+                }
             }
         }
         loop {
             if let Some(cell) = self.set_stack.pop() {
-                let reason = cell.reason.get().unwrap();
+                let reason = self.reasons[cell.id].clone().unwrap();
                 match reason {
                     SetReason::Assume(i) => {
                         self.check_index = self.set_stack.len();
@@ -179,7 +183,10 @@ impl<'a> World<'a> {
                                 while max_level < self.level {
                                     self.cancel();
                                 }
-                                if self.set_cell(cell, !state, SetReason::Conflict).is_ok() {
+                                if self
+                                    .set_cell(cell, !state, SetReason::Clause(learnt))
+                                    .is_ok()
+                                {
                                     return true;
                                 } else {
                                     return self.backup();

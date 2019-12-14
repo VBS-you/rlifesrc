@@ -1,7 +1,8 @@
 //! Non-totalistic life-like rules.
 
 use crate::{
-    cells::{Alive, CellRef, ConflReason, Dead, SetReason, State},
+    cells::{Alive, CellRef, Dead, State},
+    clause::{ConflReason, SetReason},
     world::World,
 };
 use bitflags::bitflags;
@@ -19,7 +20,7 @@ use ca_rules::{ParseNtLife, ParseRuleError};
 /// * `0b_01` means alive,
 /// * `0b_00` means unknown.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Desc(usize);
+pub(crate) struct Desc(pub(crate) usize);
 
 impl Desc {
     pub(crate) fn new(state: State, succ_state: State) -> Desc {
@@ -60,68 +61,6 @@ impl<'a> CellRef<'a> {
         let mut desc = self.desc.get();
         desc.0 ^= change_num;
         self.desc.set(desc);
-    }
-}
-
-impl<'a> SetReason<'a> {
-    pub(crate) fn cells(self, cell: CellRef<'a>) -> Vec<CellRef<'a>> {
-        match self {
-            SetReason::Rule(cell0) => {
-                let desc = cell0.desc.get();
-                let mut cells = Vec::with_capacity(10);
-                if desc.0 & 0b11 != 0 && cell != cell0 {
-                    cells.push(cell0);
-                }
-                if desc.0 & 0b11 << 2 != 0 {
-                    if let Some(succ) = cell0.succ {
-                        if cell != succ {
-                            cells.push(succ);
-                        }
-                    }
-                }
-                for i in 0..8 {
-                    if desc.0 & 0x0101 << i << 4 != 0 {
-                        if let Some(neigh) = cell0.nbhd[i] {
-                            if cell != neigh {
-                                cells.push(neigh);
-                            }
-                        }
-                    }
-                }
-                cells
-            }
-            SetReason::Sym(sym) => vec![sym],
-            _ => Vec::new(),
-        }
-    }
-}
-
-impl<'a> ConflReason<'a> {
-    pub(crate) fn cells(self) -> Vec<CellRef<'a>> {
-        match self {
-            ConflReason::Rule(cell) => {
-                let desc = cell.desc.get();
-                let mut cells = Vec::with_capacity(10);
-                if desc.0 & 0b11 != 0 {
-                    cells.push(cell);
-                }
-                if desc.0 & 0b11 << 2 != 0 {
-                    if let Some(succ) = cell.succ {
-                        cells.push(succ);
-                    }
-                }
-                for i in 0..8 {
-                    if desc.0 & 0x0101 << i << 4 != 0 {
-                        if let Some(neigh) = cell.nbhd[i] {
-                            cells.push(neigh);
-                        }
-                    }
-                }
-                cells
-            }
-            ConflReason::Sym(cell, sym) => vec![cell, sym],
-            _ => Vec::new(),
-        }
     }
 }
 
