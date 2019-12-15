@@ -145,10 +145,11 @@ impl<'a> Debug for LifeCell<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(
             f,
-            "LifeCell {{ coord: {:?}, state: {:?}, desc: {:?} }}",
+            "LifeCell {{ coord: {:?}, state: {:?}, desc: {:?}, level: {:?} }}",
             self.coord,
             self.state.get(),
-            self.desc.get()
+            self.desc.get(),
+            self.level.get()
         )
     }
 }
@@ -176,6 +177,13 @@ impl<'a> Deref for CellRef<'a> {
 
 impl<'a> Debug for CellRef<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "CellRef {{ coord: {:?} }}", self.coord)
+        write!(
+            f,
+            "CellRef {{ coord: {:?}, state: {:?}, desc: {:?}, level: {:?} }}",
+            self.coord,
+            self.state.get(),
+            self.desc.get(),
+            self.level.get()
+        )
     }
 }

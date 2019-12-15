@@ -28,7 +28,7 @@ use crate::cells::CellRef;
 // }
 
 /// Reasons for setting a cell.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SetReason<'a> {
     /// Assumed when nothing can be deduced.
     ///
@@ -86,7 +86,7 @@ impl<'a> SetReason<'a> {
 }
 
 /// Reasons for a conflict.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ConflReason<'a> {
     /// Deduced from the rule when constitifying another cell.
     Rule(CellRef<'a>),

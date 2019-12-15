@@ -159,7 +159,10 @@ impl<'a> World<'a> {
                         self.search_index = i + 1;
                         let state = cell.state.get().unwrap();
                         self.clear_cell(cell);
-                        if self.set_cell(cell, !state, SetReason::Conflict).is_ok() {
+                        if self
+                            .set_cell(cell, !state, SetReason::Clause(learnt))
+                            .is_ok()
+                        {
                             return true;
                         } else {
                             return self.backup();
@@ -200,7 +203,8 @@ impl<'a> World<'a> {
                                             cell.seen.set(true);
                                         }
                                     } else if level.is_some() && level.unwrap() > 0 {
-                                        max_level = max_level.max(level.unwrap())
+                                        max_level = max_level.max(level.unwrap());
+                                        learnt.push(cell);
                                     }
                                 }
                                 if cell.level.get() == Some(self.level) {
