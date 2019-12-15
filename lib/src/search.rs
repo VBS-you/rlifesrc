@@ -200,7 +200,10 @@ impl<'a> World<'a> {
                                             cell.seen.set(true);
                                         }
                                     } else if level.is_some() && level.unwrap() > 0 {
-                                        max_level = max_level.max(level.unwrap())
+                                        max_level = max_level.max(level.unwrap());
+                                        if !learnt.contains(&cell) {
+                                            learnt.push(cell);
+                                        }
                                     }
                                 }
                                 if cell.level.get() == Some(self.level) {
