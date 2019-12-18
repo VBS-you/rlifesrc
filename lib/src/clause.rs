@@ -1,4 +1,4 @@
-//! This mod is not yet used.
+//! Reasons and clauses.
 
 use crate::cells::CellRef;
 

@@ -159,6 +159,9 @@ impl<'a> World<'a> {
                         self.search_index = i + 1;
                         let state = cell.state.get().unwrap();
                         self.clear_cell(cell);
+                        while max_level < self.level {
+                            self.cancel();
+                        }
                         if self
                             .set_cell(cell, !state, SetReason::Clause(learnt))
                             .is_ok()
