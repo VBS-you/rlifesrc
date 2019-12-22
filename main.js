@@ -579,11 +579,17 @@ Module.STDWEB_PRIVATE.acquire_tmp = function( dummy ) {
             "__cargo_web_snippet_2908dbb08792df5e699e324eec3e29fd6a57c2c9": function($0) {
                 var o = Module.STDWEB_PRIVATE.acquire_js_reference( $0 );return (o instanceof HTMLInputElement);
             },
+            "__cargo_web_snippet_291764560d8c93ce57bd9acbf57c871154dfcf94": function($0) {
+                var o = Module.STDWEB_PRIVATE.acquire_js_reference( $0 );return (o instanceof MouseEvent && o.type === "dblclick");
+            },
             "__cargo_web_snippet_3730ae2ea96d69416fa5ec352b8ebb9d03d0f955": function($0, $1, $2) {
                 $1 = Module.STDWEB_PRIVATE.to_js($1);$2 = Module.STDWEB_PRIVATE.to_js($2);Module.STDWEB_PRIVATE.from_js($0, (function(){return($1).getItem(($2));})());
             },
             "__cargo_web_snippet_3c5e83d16a83fc7147ec91e2506438012952f55a": function($0) {
                 var o = Module.STDWEB_PRIVATE.acquire_js_reference( $0 );return (o instanceof Element);
+            },
+            "__cargo_web_snippet_3e0f0762f590afbb4c73b0046d2db7956524fadd": function($0, $1) {
+                $1 = Module.STDWEB_PRIVATE.to_js($1);Module.STDWEB_PRIVATE.from_js($0, (function(){return($1).deltaY;})());
             },
             "__cargo_web_snippet_3f65121d75f9e7466cf2838a32c69a37e1a71096": function($0) {
                 var o = Module.STDWEB_PRIVATE.acquire_js_reference( $0 );return (o instanceof HTMLSelectElement);
@@ -600,6 +606,9 @@ Module.STDWEB_PRIVATE.acquire_tmp = function( dummy ) {
             "__cargo_web_snippet_4a7df277900746999886798c4e9ff738877c3d95": function($0) {
                 $0 = Module.STDWEB_PRIVATE.to_js($0);var handle=($0);clearInterval(handle.interval_id);handle.callback.drop();
             },
+            "__cargo_web_snippet_5b7b0a37a1d17754654c9c4c6c13f57dd52294fd": function($0) {
+                var o = Module.STDWEB_PRIVATE.acquire_js_reference( $0 );return (o instanceof MouseEvent && o.type === "wheel");
+            },
             "__cargo_web_snippet_5c3091ae7fa9c42123eec37f64de99a5808e7ef2": function($0) {
                 var o = Module.STDWEB_PRIVATE.acquire_js_reference( $0 );return (o instanceof Array);
             },
@@ -612,6 +621,9 @@ Module.STDWEB_PRIVATE.acquire_tmp = function( dummy ) {
             "__cargo_web_snippet_690311d2f9134ac0983620c38a9e6460d4165607": function($0, $1) {
                 $1 = Module.STDWEB_PRIVATE.to_js($1);Module.STDWEB_PRIVATE.from_js($0, (function(){return($1).nextSibling;})());
             },
+            "__cargo_web_snippet_699b36527bea62107d66b373a001a7cbef6b6680": function($0, $1) {
+                $0 = Module.STDWEB_PRIVATE.to_js($0);$1 = Module.STDWEB_PRIVATE.to_js($1);($0).selectAllChildren(($1));
+            },
             "__cargo_web_snippet_6e6355dd5eceb8cbd2d69cb1711089df37fe3073": function($0, $1) {
                 $0 = Module.STDWEB_PRIVATE.to_js($0);$1 = Module.STDWEB_PRIVATE.to_js($1);var worker=($0);var bytes=($1);worker.postMessage(bytes);
             },
@@ -620,6 +632,9 @@ Module.STDWEB_PRIVATE.acquire_tmp = function( dummy ) {
             },
             "__cargo_web_snippet_72fc447820458c720c68d0d8e078ede631edd723": function($0, $1, $2) {
                 console.error( 'Panic location:', Module.STDWEB_PRIVATE.to_js_string( $0, $1 ) + ':' + $2 );
+            },
+            "__cargo_web_snippet_7bead6b563d52eee65504adb6b76c5cacb5428d3": function($0) {
+                $0 = Module.STDWEB_PRIVATE.to_js($0);($0).preventDefault();
             },
             "__cargo_web_snippet_7c2f6be252b58b3083594e63fac2e18c10259785": function($0, $1) {
                 $0 = Module.STDWEB_PRIVATE.to_js($0);$1 = Module.STDWEB_PRIVATE.to_js($1);($0).postMessage(($1));
@@ -674,6 +689,9 @@ Module.STDWEB_PRIVATE.acquire_tmp = function( dummy ) {
             },
             "__cargo_web_snippet_b06dde4acf09433b5190a4b001259fe5d4abcbc2": function($0, $1) {
                 $1 = Module.STDWEB_PRIVATE.to_js($1);Module.STDWEB_PRIVATE.from_js($0, (function(){return($1).success;})());
+            },
+            "__cargo_web_snippet_b6a0d26774f4ee8506baf6d7587100a00b68ee84": function($0, $1) {
+                $1 = Module.STDWEB_PRIVATE.to_js($1);Module.STDWEB_PRIVATE.from_js($0, (function(){return($1).getSelection();})());
             },
             "__cargo_web_snippet_bb618d13cbb219642bd219af99ee1519e5658d77": function($0, $1) {
                 $1 = Module.STDWEB_PRIVATE.to_js($1);Module.STDWEB_PRIVATE.from_js($0, (function(){return($1).classList;})());
