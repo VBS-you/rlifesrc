@@ -747,6 +747,9 @@ Module.STDWEB_PRIVATE.acquire_tmp = function( dummy ) {
             "__cargo_web_snippet_e9638d6405ab65f78daf4a5af9c9de14ecf1e2ec": function($0) {
                 $0 = Module.STDWEB_PRIVATE.to_js($0);Module.STDWEB_PRIVATE.unregister_raw_value(($0));
             },
+            "__cargo_web_snippet_e9df01a5f35c111a75602e56d31a49117d954de0": function($0, $1) {
+                $1 = Module.STDWEB_PRIVATE.to_js($1);Module.STDWEB_PRIVATE.from_js($0, (function(){try{return{value:function(){var span=document.createElement("span");span.innerHTML=($1);if(span.childNodes.length !=1){throw new DOMException("Node::from_html requires a single root node but has: "+span.childNodes.length,"SyntaxError");}return span.childNodes[0];}(),success:true};}catch(error){return{error:error,success:false};}})());
+            },
             "__cargo_web_snippet_f03767d5868baf486b51c1e3988d0ce100e850ca": function($0, $1) {
                 $1 = Module.STDWEB_PRIVATE.to_js($1);Module.STDWEB_PRIVATE.from_js($0, (function(){return($1).lastChild;})());
             },
