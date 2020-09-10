@@ -1,636 +1,467 @@
-"use strict";
+let wasm_bindgen;
+(function() {
+    const __exports = {};
+    let wasm;
 
-if( typeof Rust === "undefined" ) {
-    var Rust = {};
+    const heap = new Array(32).fill(undefined);
+
+    heap.push(undefined, null, true, false);
+
+function getObject(idx) { return heap[idx]; }
+
+let heap_next = heap.length;
+
+function dropObject(idx) {
+    if (idx < 36) return;
+    heap[idx] = heap_next;
+    heap_next = idx;
 }
 
-(function( root, factory ) {
-    if( typeof define === "function" && define.amd ) {
-        define( [], factory );
-    } else if( typeof module === "object" && module.exports ) {
-        module.exports = factory();
+function takeObject(idx) {
+    const ret = getObject(idx);
+    dropObject(idx);
+    return ret;
+}
+
+function addHeapObject(obj) {
+    if (heap_next === heap.length) heap.push(heap.length + 1);
+    const idx = heap_next;
+    heap_next = heap[idx];
+
+    heap[idx] = obj;
+    return idx;
+}
+
+function debugString(val) {
+    // primitive types
+    const type = typeof val;
+    if (type == 'number' || type == 'boolean' || val == null) {
+        return  `${val}`;
+    }
+    if (type == 'string') {
+        return `"${val}"`;
+    }
+    if (type == 'symbol') {
+        const description = val.description;
+        if (description == null) {
+            return 'Symbol';
+        } else {
+            return `Symbol(${description})`;
+        }
+    }
+    if (type == 'function') {
+        const name = val.name;
+        if (typeof name == 'string' && name.length > 0) {
+            return `Function(${name})`;
+        } else {
+            return 'Function';
+        }
+    }
+    // objects
+    if (Array.isArray(val)) {
+        const length = val.length;
+        let debug = '[';
+        if (length > 0) {
+            debug += debugString(val[0]);
+        }
+        for(let i = 1; i < length; i++) {
+            debug += ', ' + debugString(val[i]);
+        }
+        debug += ']';
+        return debug;
+    }
+    // Test for built-in
+    const builtInMatches = /\[object ([^\]]+)\]/.exec(toString.call(val));
+    let className;
+    if (builtInMatches.length > 1) {
+        className = builtInMatches[1];
     } else {
-        Rust.worker = factory();
+        // Failed to match the standard '[object ClassName]'
+        return toString.call(val);
     }
-}( this, function() {
-    return (function( module_factory ) {
-        var instance = module_factory();
-
-        if( typeof process === "object" && typeof process.versions === "object" && typeof process.versions.node === "string" ) {
-            var fs = require( "fs" );
-            var path = require( "path" );
-            var wasm_path = path.join( __dirname, "worker.wasm" );
-            var buffer = fs.readFileSync( wasm_path );
-            var mod = new WebAssembly.Module( buffer );
-            var wasm_instance = new WebAssembly.Instance( mod, instance.imports );
-            return instance.initialize( wasm_instance );
-        } else {
-            var file = fetch( "worker.wasm", {credentials: "same-origin"} );
-
-            var wasm_instance = ( typeof WebAssembly.instantiateStreaming === "function"
-                ? WebAssembly.instantiateStreaming( file, instance.imports )
-                    .then( function( result ) { return result.instance; } )
-
-                : file
-                    .then( function( response ) { return response.arrayBuffer(); } )
-                    .then( function( bytes ) { return WebAssembly.compile( bytes ); } )
-                    .then( function( mod ) { return WebAssembly.instantiate( mod, instance.imports ) } ) );
-
-            return wasm_instance
-                .then( function( wasm_instance ) {
-                    var exports = instance.initialize( wasm_instance );
-                    console.log( "Finished loading Rust wasm module 'worker'" );
-                    return exports;
-                })
-                .catch( function( error ) {
-                    console.log( "Error loading Rust wasm module 'worker':", error );
-                    throw error;
-                });
-        }
-    }( function() {
-    var Module = {};
-
-    Module.STDWEB_PRIVATE = {};
-
-// This is based on code from Emscripten's preamble.js.
-Module.STDWEB_PRIVATE.to_utf8 = function to_utf8( str, addr ) {
-    var HEAPU8 = Module.HEAPU8;
-    for( var i = 0; i < str.length; ++i ) {
-        // Gotcha: charCodeAt returns a 16-bit word that is a UTF-16 encoded code unit, not a Unicode code point of the character! So decode UTF16->UTF32->UTF8.
-        // See http://unicode.org/faq/utf_bom.html#utf16-3
-        // For UTF8 byte structure, see http://en.wikipedia.org/wiki/UTF-8#Description and https://www.ietf.org/rfc/rfc2279.txt and https://tools.ietf.org/html/rfc3629
-        var u = str.charCodeAt( i ); // possibly a lead surrogate
-        if( u >= 0xD800 && u <= 0xDFFF ) {
-            u = 0x10000 + ((u & 0x3FF) << 10) | (str.charCodeAt( ++i ) & 0x3FF);
-        }
-
-        if( u <= 0x7F ) {
-            HEAPU8[ addr++ ] = u;
-        } else if( u <= 0x7FF ) {
-            HEAPU8[ addr++ ] = 0xC0 | (u >> 6);
-            HEAPU8[ addr++ ] = 0x80 | (u & 63);
-        } else if( u <= 0xFFFF ) {
-            HEAPU8[ addr++ ] = 0xE0 | (u >> 12);
-            HEAPU8[ addr++ ] = 0x80 | ((u >> 6) & 63);
-            HEAPU8[ addr++ ] = 0x80 | (u & 63);
-        } else if( u <= 0x1FFFFF ) {
-            HEAPU8[ addr++ ] = 0xF0 | (u >> 18);
-            HEAPU8[ addr++ ] = 0x80 | ((u >> 12) & 63);
-            HEAPU8[ addr++ ] = 0x80 | ((u >> 6) & 63);
-            HEAPU8[ addr++ ] = 0x80 | (u & 63);
-        } else if( u <= 0x3FFFFFF ) {
-            HEAPU8[ addr++ ] = 0xF8 | (u >> 24);
-            HEAPU8[ addr++ ] = 0x80 | ((u >> 18) & 63);
-            HEAPU8[ addr++ ] = 0x80 | ((u >> 12) & 63);
-            HEAPU8[ addr++ ] = 0x80 | ((u >> 6) & 63);
-            HEAPU8[ addr++ ] = 0x80 | (u & 63);
-        } else {
-            HEAPU8[ addr++ ] = 0xFC | (u >> 30);
-            HEAPU8[ addr++ ] = 0x80 | ((u >> 24) & 63);
-            HEAPU8[ addr++ ] = 0x80 | ((u >> 18) & 63);
-            HEAPU8[ addr++ ] = 0x80 | ((u >> 12) & 63);
-            HEAPU8[ addr++ ] = 0x80 | ((u >> 6) & 63);
-            HEAPU8[ addr++ ] = 0x80 | (u & 63);
-        }
-    }
-};
-
-Module.STDWEB_PRIVATE.noop = function() {};
-Module.STDWEB_PRIVATE.to_js = function to_js( address ) {
-    var kind = Module.HEAPU8[ address + 12 ];
-    if( kind === 0 ) {
-        return undefined;
-    } else if( kind === 1 ) {
-        return null;
-    } else if( kind === 2 ) {
-        return Module.HEAP32[ address / 4 ];
-    } else if( kind === 3 ) {
-        return Module.HEAPF64[ address / 8 ];
-    } else if( kind === 4 ) {
-        var pointer = Module.HEAPU32[ address / 4 ];
-        var length = Module.HEAPU32[ (address + 4) / 4 ];
-        return Module.STDWEB_PRIVATE.to_js_string( pointer, length );
-    } else if( kind === 5 ) {
-        return false;
-    } else if( kind === 6 ) {
-        return true;
-    } else if( kind === 7 ) {
-        var pointer = Module.STDWEB_PRIVATE.arena + Module.HEAPU32[ address / 4 ];
-        var length = Module.HEAPU32[ (address + 4) / 4 ];
-        var output = [];
-        for( var i = 0; i < length; ++i ) {
-            output.push( Module.STDWEB_PRIVATE.to_js( pointer + i * 16 ) );
-        }
-        return output;
-    } else if( kind === 8 ) {
-        var arena = Module.STDWEB_PRIVATE.arena;
-        var value_array_pointer = arena + Module.HEAPU32[ address / 4 ];
-        var length = Module.HEAPU32[ (address + 4) / 4 ];
-        var key_array_pointer = arena + Module.HEAPU32[ (address + 8) / 4 ];
-        var output = {};
-        for( var i = 0; i < length; ++i ) {
-            var key_pointer = Module.HEAPU32[ (key_array_pointer + i * 8) / 4 ];
-            var key_length = Module.HEAPU32[ (key_array_pointer + 4 + i * 8) / 4 ];
-            var key = Module.STDWEB_PRIVATE.to_js_string( key_pointer, key_length );
-            var value = Module.STDWEB_PRIVATE.to_js( value_array_pointer + i * 16 );
-            output[ key ] = value;
-        }
-        return output;
-    } else if( kind === 9 ) {
-        return Module.STDWEB_PRIVATE.acquire_js_reference( Module.HEAP32[ address / 4 ] );
-    } else if( kind === 10 || kind === 12 || kind === 13 ) {
-        var adapter_pointer = Module.HEAPU32[ address / 4 ];
-        var pointer = Module.HEAPU32[ (address + 4) / 4 ];
-        var deallocator_pointer = Module.HEAPU32[ (address + 8) / 4 ];
-        var num_ongoing_calls = 0;
-        var drop_queued = false;
-        var output = function() {
-            if( pointer === 0 || drop_queued === true ) {
-                if (kind === 10) {
-                    throw new ReferenceError( "Already dropped Rust function called!" );
-                } else if (kind === 12) {
-                    throw new ReferenceError( "Already dropped FnMut function called!" );
-                } else {
-                    throw new ReferenceError( "Already called or dropped FnOnce function called!" );
-                }
-            }
-
-            var function_pointer = pointer;
-            if (kind === 13) {
-                output.drop = Module.STDWEB_PRIVATE.noop;
-                pointer = 0;
-            }
-
-            if (num_ongoing_calls !== 0) {
-                if (kind === 12 || kind === 13) {
-                    throw new ReferenceError( "FnMut function called multiple times concurrently!" );
-                }
-            }
-
-            var args = Module.STDWEB_PRIVATE.alloc( 16 );
-            Module.STDWEB_PRIVATE.serialize_array( args, arguments );
-
-            try {
-                num_ongoing_calls += 1;
-                Module.STDWEB_PRIVATE.dyncall( "vii", adapter_pointer, [function_pointer, args] );
-                var result = Module.STDWEB_PRIVATE.tmp;
-                Module.STDWEB_PRIVATE.tmp = null;
-            } finally {
-                num_ongoing_calls -= 1;
-            }
-
-            if( drop_queued === true && num_ongoing_calls === 0 ) {
-                output.drop();
-            }
-
-            return result;
-        };
-
-        output.drop = function() {
-            if (num_ongoing_calls !== 0) {
-                drop_queued = true;
-                return;
-            }
-
-            output.drop = Module.STDWEB_PRIVATE.noop;
-            var function_pointer = pointer;
-            pointer = 0;
-
-            if (function_pointer != 0) {
-                Module.STDWEB_PRIVATE.dyncall( "vi", deallocator_pointer, [function_pointer] );
-            }
-        };
-
-        return output;
-    } else if( kind === 14 ) {
-        var pointer = Module.HEAPU32[ address / 4 ];
-        var length = Module.HEAPU32[ (address + 4) / 4 ];
-        var array_kind = Module.HEAPU32[ (address + 8) / 4 ];
-        var pointer_end = pointer + length;
-
-        switch( array_kind ) {
-            case 0:
-                return Module.HEAPU8.subarray( pointer, pointer_end );
-            case 1:
-                return Module.HEAP8.subarray( pointer, pointer_end );
-            case 2:
-                return Module.HEAPU16.subarray( pointer, pointer_end );
-            case 3:
-                return Module.HEAP16.subarray( pointer, pointer_end );
-            case 4:
-                return Module.HEAPU32.subarray( pointer, pointer_end );
-            case 5:
-                return Module.HEAP32.subarray( pointer, pointer_end );
-            case 6:
-                return Module.HEAPF32.subarray( pointer, pointer_end );
-            case 7:
-                return Module.HEAPF64.subarray( pointer, pointer_end );
-        }
-    } else if( kind === 15 ) {
-        return Module.STDWEB_PRIVATE.get_raw_value( Module.HEAPU32[ address / 4 ] );
-    }
-};
-
-Module.STDWEB_PRIVATE.serialize_object = function serialize_object( address, value ) {
-    var keys = Object.keys( value );
-    var length = keys.length;
-    var key_array_pointer = Module.STDWEB_PRIVATE.alloc( length * 8 );
-    var value_array_pointer = Module.STDWEB_PRIVATE.alloc( length * 16 );
-    Module.HEAPU8[ address + 12 ] = 8;
-    Module.HEAPU32[ address / 4 ] = value_array_pointer;
-    Module.HEAPU32[ (address + 4) / 4 ] = length;
-    Module.HEAPU32[ (address + 8) / 4 ] = key_array_pointer;
-    for( var i = 0; i < length; ++i ) {
-        var key = keys[ i ];
-        var key_address = key_array_pointer + i * 8;
-        Module.STDWEB_PRIVATE.to_utf8_string( key_address, key );
-
-        Module.STDWEB_PRIVATE.from_js( value_array_pointer + i * 16, value[ key ] );
-    }
-};
-
-Module.STDWEB_PRIVATE.serialize_array = function serialize_array( address, value ) {
-    var length = value.length;
-    var pointer = Module.STDWEB_PRIVATE.alloc( length * 16 );
-    Module.HEAPU8[ address + 12 ] = 7;
-    Module.HEAPU32[ address / 4 ] = pointer;
-    Module.HEAPU32[ (address + 4) / 4 ] = length;
-    for( var i = 0; i < length; ++i ) {
-        Module.STDWEB_PRIVATE.from_js( pointer + i * 16, value[ i ] );
-    }
-};
-
-// New browsers and recent Node
-var cachedEncoder = ( typeof TextEncoder === "function"
-    ? new TextEncoder( "utf-8" )
-    // Old Node (before v11)
-    : ( typeof util === "object" && util && typeof util.TextEncoder === "function"
-        ? new util.TextEncoder( "utf-8" )
-        // Old browsers
-        : null ) );
-
-if ( cachedEncoder != null ) {
-    Module.STDWEB_PRIVATE.to_utf8_string = function to_utf8_string( address, value ) {
-        var buffer = cachedEncoder.encode( value );
-        var length = buffer.length;
-        var pointer = 0;
-
-        if ( length > 0 ) {
-            pointer = Module.STDWEB_PRIVATE.alloc( length );
-            Module.HEAPU8.set( buffer, pointer );
-        }
-
-        Module.HEAPU32[ address / 4 ] = pointer;
-        Module.HEAPU32[ (address + 4) / 4 ] = length;
-    };
-
-} else {
-    Module.STDWEB_PRIVATE.to_utf8_string = function to_utf8_string( address, value ) {
-        var length = Module.STDWEB_PRIVATE.utf8_len( value );
-        var pointer = 0;
-
-        if ( length > 0 ) {
-            pointer = Module.STDWEB_PRIVATE.alloc( length );
-            Module.STDWEB_PRIVATE.to_utf8( value, pointer );
-        }
-
-        Module.HEAPU32[ address / 4 ] = pointer;
-        Module.HEAPU32[ (address + 4) / 4 ] = length;
-    };
-}
-
-Module.STDWEB_PRIVATE.from_js = function from_js( address, value ) {
-    var kind = Object.prototype.toString.call( value );
-    if( kind === "[object String]" ) {
-        Module.HEAPU8[ address + 12 ] = 4;
-        Module.STDWEB_PRIVATE.to_utf8_string( address, value );
-    } else if( kind === "[object Number]" ) {
-        if( value === (value|0) ) {
-            Module.HEAPU8[ address + 12 ] = 2;
-            Module.HEAP32[ address / 4 ] = value;
-        } else {
-            Module.HEAPU8[ address + 12 ] = 3;
-            Module.HEAPF64[ address / 8 ] = value;
-        }
-    } else if( value === null ) {
-        Module.HEAPU8[ address + 12 ] = 1;
-    } else if( value === undefined ) {
-        Module.HEAPU8[ address + 12 ] = 0;
-    } else if( value === false ) {
-        Module.HEAPU8[ address + 12 ] = 5;
-    } else if( value === true ) {
-        Module.HEAPU8[ address + 12 ] = 6;
-    } else if( kind === "[object Symbol]" ) {
-        var id = Module.STDWEB_PRIVATE.register_raw_value( value );
-        Module.HEAPU8[ address + 12 ] = 15;
-        Module.HEAP32[ address / 4 ] = id;
-    } else {
-        var refid = Module.STDWEB_PRIVATE.acquire_rust_reference( value );
-        Module.HEAPU8[ address + 12 ] = 9;
-        Module.HEAP32[ address / 4 ] = refid;
-    }
-};
-
-// New browsers and recent Node
-var cachedDecoder = ( typeof TextDecoder === "function"
-    ? new TextDecoder( "utf-8" )
-    // Old Node (before v11)
-    : ( typeof util === "object" && util && typeof util.TextDecoder === "function"
-        ? new util.TextDecoder( "utf-8" )
-        // Old browsers
-        : null ) );
-
-if ( cachedDecoder != null ) {
-    Module.STDWEB_PRIVATE.to_js_string = function to_js_string( index, length ) {
-        return cachedDecoder.decode( Module.HEAPU8.subarray( index, index + length ) );
-    };
-
-} else {
-    // This is ported from Rust's stdlib; it's faster than
-    // the string conversion from Emscripten.
-    Module.STDWEB_PRIVATE.to_js_string = function to_js_string( index, length ) {
-        var HEAPU8 = Module.HEAPU8;
-        index = index|0;
-        length = length|0;
-        var end = (index|0) + (length|0);
-        var output = "";
-        while( index < end ) {
-            var x = HEAPU8[ index++ ];
-            if( x < 128 ) {
-                output += String.fromCharCode( x );
-                continue;
-            }
-            var init = (x & (0x7F >> 2));
-            var y = 0;
-            if( index < end ) {
-                y = HEAPU8[ index++ ];
-            }
-            var ch = (init << 6) | (y & 63);
-            if( x >= 0xE0 ) {
-                var z = 0;
-                if( index < end ) {
-                    z = HEAPU8[ index++ ];
-                }
-                var y_z = ((y & 63) << 6) | (z & 63);
-                ch = init << 12 | y_z;
-                if( x >= 0xF0 ) {
-                    var w = 0;
-                    if( index < end ) {
-                        w = HEAPU8[ index++ ];
-                    }
-                    ch = (init & 7) << 18 | ((y_z << 6) | (w & 63));
-
-                    output += String.fromCharCode( 0xD7C0 + (ch >> 10) );
-                    ch = 0xDC00 + (ch & 0x3FF);
-                }
-            }
-            output += String.fromCharCode( ch );
-            continue;
-        }
-        return output;
-    };
-}
-
-Module.STDWEB_PRIVATE.id_to_ref_map = {};
-Module.STDWEB_PRIVATE.id_to_refcount_map = {};
-Module.STDWEB_PRIVATE.ref_to_id_map = new WeakMap();
-// Not all types can be stored in a WeakMap
-Module.STDWEB_PRIVATE.ref_to_id_map_fallback = new Map();
-Module.STDWEB_PRIVATE.last_refid = 1;
-
-Module.STDWEB_PRIVATE.id_to_raw_value_map = {};
-Module.STDWEB_PRIVATE.last_raw_value_id = 1;
-
-Module.STDWEB_PRIVATE.acquire_rust_reference = function( reference ) {
-    if( reference === undefined || reference === null ) {
-        return 0;
-    }
-
-    var id_to_refcount_map = Module.STDWEB_PRIVATE.id_to_refcount_map;
-    var id_to_ref_map = Module.STDWEB_PRIVATE.id_to_ref_map;
-    var ref_to_id_map = Module.STDWEB_PRIVATE.ref_to_id_map;
-    var ref_to_id_map_fallback = Module.STDWEB_PRIVATE.ref_to_id_map_fallback;
-
-    var refid = ref_to_id_map.get( reference );
-    if( refid === undefined ) {
-        refid = ref_to_id_map_fallback.get( reference );
-    }
-    if( refid === undefined ) {
-        refid = Module.STDWEB_PRIVATE.last_refid++;
+    if (className == 'Object') {
+        // we're a user defined class or Object
+        // JSON.stringify avoids problems with cycles, and is generally much
+        // easier than looping through ownProperties of `val`.
         try {
-            ref_to_id_map.set( reference, refid );
-        } catch (e) {
-            ref_to_id_map_fallback.set( reference, refid );
+            return 'Object(' + JSON.stringify(val) + ')';
+        } catch (_) {
+            return 'Object';
         }
     }
-
-    if( refid in id_to_ref_map ) {
-        id_to_refcount_map[ refid ]++;
-    } else {
-        id_to_ref_map[ refid ] = reference;
-        id_to_refcount_map[ refid ] = 1;
+    // errors
+    if (val instanceof Error) {
+        return `${val.name}: ${val.message}\n${val.stack}`;
     }
+    // TODO we could test for more things here, like `Set`s and `Map`s.
+    return className;
+}
 
-    return refid;
-};
+let WASM_VECTOR_LEN = 0;
 
-Module.STDWEB_PRIVATE.acquire_js_reference = function( refid ) {
-    return Module.STDWEB_PRIVATE.id_to_ref_map[ refid ];
-};
-
-Module.STDWEB_PRIVATE.increment_refcount = function( refid ) {
-    Module.STDWEB_PRIVATE.id_to_refcount_map[ refid ]++;
-};
-
-Module.STDWEB_PRIVATE.decrement_refcount = function( refid ) {
-    var id_to_refcount_map = Module.STDWEB_PRIVATE.id_to_refcount_map;
-    if( 0 == --id_to_refcount_map[ refid ] ) {
-        var id_to_ref_map = Module.STDWEB_PRIVATE.id_to_ref_map;
-        var ref_to_id_map_fallback = Module.STDWEB_PRIVATE.ref_to_id_map_fallback;
-        var reference = id_to_ref_map[ refid ];
-        delete id_to_ref_map[ refid ];
-        delete id_to_refcount_map[ refid ];
-        ref_to_id_map_fallback.delete(reference);
+let cachegetUint8Memory0 = null;
+function getUint8Memory0() {
+    if (cachegetUint8Memory0 === null || cachegetUint8Memory0.buffer !== wasm.memory.buffer) {
+        cachegetUint8Memory0 = new Uint8Array(wasm.memory.buffer);
     }
-};
+    return cachegetUint8Memory0;
+}
 
-Module.STDWEB_PRIVATE.register_raw_value = function( value ) {
-    var id = Module.STDWEB_PRIVATE.last_raw_value_id++;
-    Module.STDWEB_PRIVATE.id_to_raw_value_map[ id ] = value;
-    return id;
-};
+let cachedTextEncoder = new TextEncoder('utf-8');
 
-Module.STDWEB_PRIVATE.unregister_raw_value = function( id ) {
-    delete Module.STDWEB_PRIVATE.id_to_raw_value_map[ id ];
-};
-
-Module.STDWEB_PRIVATE.get_raw_value = function( id ) {
-    return Module.STDWEB_PRIVATE.id_to_raw_value_map[ id ];
-};
-
-Module.STDWEB_PRIVATE.alloc = function alloc( size ) {
-    return Module.web_malloc( size );
-};
-
-Module.STDWEB_PRIVATE.dyncall = function( signature, ptr, args ) {
-    return Module.web_table.get( ptr ).apply( null, args );
-};
-
-// This is based on code from Emscripten's preamble.js.
-Module.STDWEB_PRIVATE.utf8_len = function utf8_len( str ) {
-    var len = 0;
-    for( var i = 0; i < str.length; ++i ) {
-        // Gotcha: charCodeAt returns a 16-bit word that is a UTF-16 encoded code unit, not a Unicode code point of the character! So decode UTF16->UTF32->UTF8.
-        // See http://unicode.org/faq/utf_bom.html#utf16-3
-        var u = str.charCodeAt( i ); // possibly a lead surrogate
-        if( u >= 0xD800 && u <= 0xDFFF ) {
-            u = 0x10000 + ((u & 0x3FF) << 10) | (str.charCodeAt( ++i ) & 0x3FF);
-        }
-
-        if( u <= 0x7F ) {
-            ++len;
-        } else if( u <= 0x7FF ) {
-            len += 2;
-        } else if( u <= 0xFFFF ) {
-            len += 3;
-        } else if( u <= 0x1FFFFF ) {
-            len += 4;
-        } else if( u <= 0x3FFFFFF ) {
-            len += 5;
-        } else {
-            len += 6;
-        }
-    }
-    return len;
-};
-
-Module.STDWEB_PRIVATE.prepare_any_arg = function( value ) {
-    var arg = Module.STDWEB_PRIVATE.alloc( 16 );
-    Module.STDWEB_PRIVATE.from_js( arg, value );
-    return arg;
-};
-
-Module.STDWEB_PRIVATE.acquire_tmp = function( dummy ) {
-    var value = Module.STDWEB_PRIVATE.tmp;
-    Module.STDWEB_PRIVATE.tmp = null;
-    return value;
-};
-
-
-
-    var HEAP8 = null;
-    var HEAP16 = null;
-    var HEAP32 = null;
-    var HEAPU8 = null;
-    var HEAPU16 = null;
-    var HEAPU32 = null;
-    var HEAPF32 = null;
-    var HEAPF64 = null;
-
-    Object.defineProperty( Module, 'exports', { value: {} } );
-
-    function __web_on_grow() {
-        var buffer = Module.instance.exports.memory.buffer;
-        HEAP8 = new Int8Array( buffer );
-        HEAP16 = new Int16Array( buffer );
-        HEAP32 = new Int32Array( buffer );
-        HEAPU8 = new Uint8Array( buffer );
-        HEAPU16 = new Uint16Array( buffer );
-        HEAPU32 = new Uint32Array( buffer );
-        HEAPF32 = new Float32Array( buffer );
-        HEAPF64 = new Float64Array( buffer );
-        Module.HEAP8 = HEAP8;
-        Module.HEAP16 = HEAP16;
-        Module.HEAP32 = HEAP32;
-        Module.HEAPU8 = HEAPU8;
-        Module.HEAPU16 = HEAPU16;
-        Module.HEAPU32 = HEAPU32;
-        Module.HEAPF32 = HEAPF32;
-        Module.HEAPF64 = HEAPF64;
-    }
-
+const encodeString = (typeof cachedTextEncoder.encodeInto === 'function'
+    ? function (arg, view) {
+    return cachedTextEncoder.encodeInto(arg, view);
+}
+    : function (arg, view) {
+    const buf = cachedTextEncoder.encode(arg);
+    view.set(buf);
     return {
-        imports: {
-            env: {
-                "__cargo_web_snippet_0d928c9deed59a3ed4f47e354865f7dc3b32ee9c": function($0, $1) {
-                $1 = Module.STDWEB_PRIVATE.to_js($1);Module.STDWEB_PRIVATE.from_js($0, (function(){return($1).error})());
-            },
-            "__cargo_web_snippet_10fb0150a5b019b90a877371779cdd0ec6f3ea33": function($0, $1, $2) {
-                $1 = Module.STDWEB_PRIVATE.to_js($1);$2 = Module.STDWEB_PRIVATE.to_js($2);Module.STDWEB_PRIVATE.from_js($0, (function(){try{let array=new Uint8Array(($1));self.crypto.getRandomValues(array);HEAPU8.set(array,($2));return{success:true};}catch(err){return{success:false,error:err};}})());
-            },
-            "__cargo_web_snippet_285aac3fba72d67cb459d37d4d21aa4fb62598ba": function($0) {
-                Module.STDWEB_PRIVATE.arena = $0;
-            },
-            "__cargo_web_snippet_2c6a2fabd6154e43938598e5d63f78c9e0277d3c": function($0) {
-                $0 = Module.STDWEB_PRIVATE.to_js($0);var data=($0);self.postMessage(data);
-            },
-            "__cargo_web_snippet_3709cb4f35051d155438790e2442b511cbe1f8ef": function($0) {
-                var o = Module.STDWEB_PRIVATE.acquire_js_reference( $0 );return (o instanceof Error);
-            },
-            "__cargo_web_snippet_565d7eb22cf4eeaca6c2215540351851e1420489": function($0, $1) {
-                $1 = Module.STDWEB_PRIVATE.to_js($1);Module.STDWEB_PRIVATE.from_js($0, (function(){return($1).success})());
-            },
-            "__cargo_web_snippet_5c3091ae7fa9c42123eec37f64de99a5808e7ef2": function($0) {
-                var o = Module.STDWEB_PRIVATE.acquire_js_reference( $0 );return (o instanceof Array);
-            },
-            "__cargo_web_snippet_69a406e929329c8e4aed9a22deb20e108614ef23": function() {
-                self.close();
-            },
-            "__cargo_web_snippet_6adfd08dbd894563a3df06c43de48fda9b8db5a6": function($0, $1) {
-                $0 = Module.STDWEB_PRIVATE.to_js($0);$1 = Module.STDWEB_PRIVATE.to_js($1);var handler=($0);self.onmessage=function(event){handler(event.data);};self.postMessage(($1));
-            },
-            "__cargo_web_snippet_6e1114fed8a9083841544437b12ccc90280f32cd": function($0, $1, $2) {
-                $1 = Module.STDWEB_PRIVATE.to_js($1);$2 = Module.STDWEB_PRIVATE.to_js($2);Module.STDWEB_PRIVATE.from_js($0, (function(){try{let bytes=require("crypto").randomBytes(($1));HEAPU8.set(new Uint8Array(bytes),($2));return{success:true};}catch(err){return{success:false,error:err};}})());
-            },
-            "__cargo_web_snippet_72fc447820458c720c68d0d8e078ede631edd723": function($0, $1, $2) {
-                console.error( 'Panic location:', Module.STDWEB_PRIVATE.to_js_string( $0, $1 ) + ':' + $2 );
-            },
-            "__cargo_web_snippet_80d6d56760c65e49b7be8b6b01c1ea861b046bf0": function($0) {
-                Module.STDWEB_PRIVATE.decrement_refcount( $0 );
-            },
-            "__cargo_web_snippet_88fdef85e51047882d647a7f6f4a63bf786cb581": function($0) {
-                $0 = Module.STDWEB_PRIVATE.to_js($0);var handle=($0);clearTimeout(handle.timeout_id);handle.callback.drop();
-            },
-            "__cargo_web_snippet_8c32019649bb581b1b742eeedfc410e2bedd56a6": function($0, $1) {
-                var array = Module.STDWEB_PRIVATE.acquire_js_reference( $0 );Module.STDWEB_PRIVATE.serialize_array( $1, array );
-            },
-            "__cargo_web_snippet_97495987af1720d8a9a923fa4683a7b683e3acd6": function($0, $1) {
-                console.error( 'Panic error message:', Module.STDWEB_PRIVATE.to_js_string( $0, $1 ) );
-            },
-            "__cargo_web_snippet_a43580d4464d7fa740f085251cce2bf50ef2e3db": function($0) {
-                Module.STDWEB_PRIVATE.from_js($0, (function(){try{if(typeof self==="object"&&typeof self.crypto==="object"&&typeof self.crypto.getRandomValues==="function"){return{success:true,ty:1};}if(typeof require("crypto").randomBytes==="function"){return{success:true,ty:2};}return{success:false,error:new Error("not supported")};}catch(err){return{success:false,error:err};}})());
-            },
-            "__cargo_web_snippet_af48d409a7bc53bdf52746d5cd246d8e41014718": function($0, $1) {
-                $1 = Module.STDWEB_PRIVATE.to_js($1);Module.STDWEB_PRIVATE.from_js($0, (function(){return($1).ty})());
-            },
-            "__cargo_web_snippet_dc2fd915bd92f9e9c6a3bd15174f1414eee3dbaf": function() {
-                console.error( 'Encountered a panic!' );
-            },
-            "__cargo_web_snippet_e9638d6405ab65f78daf4a5af9c9de14ecf1e2ec": function($0) {
-                $0 = Module.STDWEB_PRIVATE.to_js($0);Module.STDWEB_PRIVATE.unregister_raw_value(($0));
-            },
-            "__cargo_web_snippet_f11967ebdd9b2715f6e5dff0f3829fecc1b1a7ec": function($0, $1, $2) {
-                $1 = Module.STDWEB_PRIVATE.to_js($1);$2 = Module.STDWEB_PRIVATE.to_js($2);Module.STDWEB_PRIVATE.from_js($0, (function(){var callback=($1);var action=function(){callback();callback.drop();};var delay=($2);return{timeout_id:setTimeout(action,delay),callback:callback,};})());
-            },
-            "__cargo_web_snippet_ff5103e6cc179d13b4c7a785bdce2708fd559fc0": function($0) {
-                Module.STDWEB_PRIVATE.tmp = Module.STDWEB_PRIVATE.to_js( $0 );
-            },
-                "__web_on_grow": __web_on_grow
+        read: arg.length,
+        written: buf.length
+    };
+});
+
+function passStringToWasm0(arg, malloc, realloc) {
+
+    if (realloc === undefined) {
+        const buf = cachedTextEncoder.encode(arg);
+        const ptr = malloc(buf.length);
+        getUint8Memory0().subarray(ptr, ptr + buf.length).set(buf);
+        WASM_VECTOR_LEN = buf.length;
+        return ptr;
+    }
+
+    let len = arg.length;
+    let ptr = malloc(len);
+
+    const mem = getUint8Memory0();
+
+    let offset = 0;
+
+    for (; offset < len; offset++) {
+        const code = arg.charCodeAt(offset);
+        if (code > 0x7F) break;
+        mem[ptr + offset] = code;
+    }
+
+    if (offset !== len) {
+        if (offset !== 0) {
+            arg = arg.slice(offset);
+        }
+        ptr = realloc(ptr, len, len = offset + arg.length * 3);
+        const view = getUint8Memory0().subarray(ptr + offset, ptr + len);
+        const ret = encodeString(arg, view);
+
+        offset += ret.written;
+    }
+
+    WASM_VECTOR_LEN = offset;
+    return ptr;
+}
+
+let cachegetInt32Memory0 = null;
+function getInt32Memory0() {
+    if (cachegetInt32Memory0 === null || cachegetInt32Memory0.buffer !== wasm.memory.buffer) {
+        cachegetInt32Memory0 = new Int32Array(wasm.memory.buffer);
+    }
+    return cachegetInt32Memory0;
+}
+
+let cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
+
+cachedTextDecoder.decode();
+
+function getStringFromWasm0(ptr, len) {
+    return cachedTextDecoder.decode(getUint8Memory0().subarray(ptr, ptr + len));
+}
+
+function makeClosure(arg0, arg1, dtor, f) {
+    const state = { a: arg0, b: arg1, cnt: 1, dtor };
+    const real = (...args) => {
+        // First up with a closure we increment the internal reference
+        // count. This ensures that the Rust closure environment won't
+        // be deallocated while we're invoking it.
+        state.cnt++;
+        try {
+            return f(state.a, state.b, ...args);
+        } finally {
+            if (--state.cnt === 0) {
+                wasm.__wbindgen_export_2.get(state.dtor)(state.a, state.b);
+                state.a = 0;
+
             }
-        },
-        initialize: function( instance ) {
-            Object.defineProperty( Module, 'instance', { value: instance } );
-            Object.defineProperty( Module, 'web_malloc', { value: Module.instance.exports.__web_malloc } );
-            Object.defineProperty( Module, 'web_free', { value: Module.instance.exports.__web_free } );
-            Object.defineProperty( Module, 'web_table', { value: Module.instance.exports.__indirect_function_table } );
+        }
+    };
+    real.original = state;
 
-            
-            __web_on_grow();
-            Module.instance.exports.main();
+    return real;
+}
+function __wbg_adapter_16(arg0, arg1, arg2) {
+    wasm._dyn_core__ops__function__Fn__A____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__h17c6abe425b93bd2(arg0, arg1, addHeapObject(arg2));
+}
 
-            return Module.exports;
+function makeMutClosure(arg0, arg1, dtor, f) {
+    const state = { a: arg0, b: arg1, cnt: 1, dtor };
+    const real = (...args) => {
+        // First up with a closure we increment the internal reference
+        // count. This ensures that the Rust closure environment won't
+        // be deallocated while we're invoking it.
+        state.cnt++;
+        const a = state.a;
+        state.a = 0;
+        try {
+            return f(a, state.b, ...args);
+        } finally {
+            if (--state.cnt === 0) {
+                wasm.__wbindgen_export_2.get(state.dtor)(a, state.b);
+
+            } else {
+                state.a = a;
+            }
+        }
+    };
+    real.original = state;
+
+    return real;
+}
+function __wbg_adapter_19(arg0, arg1) {
+    wasm._dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__hb6ae38c52f82b306(arg0, arg1);
+}
+
+function handleError(f) {
+    return function () {
+        try {
+            return f.apply(this, arguments);
+
+        } catch (e) {
+            wasm.__wbindgen_exn_store(addHeapObject(e));
         }
     };
 }
- ));
-}));
+
+function getArrayU8FromWasm0(ptr, len) {
+    return getUint8Memory0().subarray(ptr / 1, ptr / 1 + len);
+}
+
+async function load(module, imports) {
+    if (typeof Response === 'function' && module instanceof Response) {
+
+        if (typeof WebAssembly.instantiateStreaming === 'function') {
+            try {
+                return await WebAssembly.instantiateStreaming(module, imports);
+
+            } catch (e) {
+                if (module.headers.get('Content-Type') != 'application/wasm') {
+                    console.warn("`WebAssembly.instantiateStreaming` failed because your server does not serve wasm with `application/wasm` MIME type. Falling back to `WebAssembly.instantiate` which is slower. Original error:\n", e);
+
+                } else {
+                    throw e;
+                }
+            }
+        }
+
+        const bytes = await module.arrayBuffer();
+        return await WebAssembly.instantiate(bytes, imports);
+
+    } else {
+
+        const instance = await WebAssembly.instantiate(module, imports);
+
+        if (instance instanceof WebAssembly.Instance) {
+            return { instance, module };
+
+        } else {
+            return instance;
+        }
+    }
+}
+
+async function init(input) {
+    if (typeof input === 'undefined') {
+        let src;
+        if (typeof document === 'undefined') {
+            src = location.href;
+        } else {
+            src = document.currentScript.src;
+        }
+        input = src.replace(/\.js$/, '_bg.wasm');
+    }
+    const imports = {};
+    imports.wbg = {};
+    imports.wbg.__wbindgen_object_drop_ref = function(arg0) {
+        takeObject(arg0);
+    };
+    imports.wbg.__wbindgen_cb_drop = function(arg0) {
+        const obj = takeObject(arg0).original;
+        if (obj.cnt-- == 1) {
+            obj.a = 0;
+            return true;
+        }
+        var ret = false;
+        return ret;
+    };
+    imports.wbg.__wbindgen_object_clone_ref = function(arg0) {
+        var ret = getObject(arg0);
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbindgen_is_undefined = function(arg0) {
+        var ret = getObject(arg0) === undefined;
+        return ret;
+    };
+    imports.wbg.__wbg_new_59cb74e423758ede = function() {
+        var ret = new Error();
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbg_stack_558ba5917b466edd = function(arg0, arg1) {
+        var ret = getObject(arg1).stack;
+        var ptr0 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        getInt32Memory0()[arg0 / 4 + 1] = len0;
+        getInt32Memory0()[arg0 / 4 + 0] = ptr0;
+    };
+    imports.wbg.__wbg_error_4bb6c2a97407129a = function(arg0, arg1) {
+        try {
+            console.error(getStringFromWasm0(arg0, arg1));
+        } finally {
+            wasm.__wbindgen_free(arg0, arg1);
+        }
+    };
+    imports.wbg.__wbg_Window_f826a1dec163bacb = function(arg0) {
+        var ret = getObject(arg0).Window;
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbg_WorkerGlobalScope_967d186155183d38 = function(arg0) {
+        var ret = getObject(arg0).WorkerGlobalScope;
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbg_clearTimeout_dd3fc8919742efa0 = function(arg0, arg1) {
+        getObject(arg0).clearTimeout(arg1);
+    };
+    imports.wbg.__wbg_setTimeout_eaf00c9296a6ab88 = handleError(function(arg0, arg1, arg2) {
+        var ret = getObject(arg0).setTimeout(getObject(arg1), arg2);
+        return ret;
+    });
+    imports.wbg.__wbg_setonmessage_3b54ac45201eebdf = function(arg0, arg1) {
+        getObject(arg0).onmessage = getObject(arg1);
+    };
+    imports.wbg.__wbg_close_d55c1b40b83acc13 = function(arg0) {
+        getObject(arg0).close();
+    };
+    imports.wbg.__wbg_postMessage_048e2aa1055be67d = handleError(function(arg0, arg1) {
+        getObject(arg0).postMessage(getObject(arg1));
+    });
+    imports.wbg.__wbg_data_5202563349cacee4 = function(arg0) {
+        var ret = getObject(arg0).data;
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbg_clearTimeout_cfa43c892b7b3674 = function(arg0, arg1) {
+        getObject(arg0).clearTimeout(arg1);
+    };
+    imports.wbg.__wbg_setTimeout_2e5624eedbe8ae2c = handleError(function(arg0, arg1, arg2) {
+        var ret = getObject(arg0).setTimeout(getObject(arg1), arg2);
+        return ret;
+    });
+    imports.wbg.__wbg_call_8e95613cc6524977 = handleError(function(arg0, arg1) {
+        var ret = getObject(arg0).call(getObject(arg1));
+        return addHeapObject(ret);
+    });
+    imports.wbg.__wbg_newnoargs_f3b8a801d5d4b079 = function(arg0, arg1) {
+        var ret = new Function(getStringFromWasm0(arg0, arg1));
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbg_self_07b2f89e82ceb76d = handleError(function() {
+        var ret = self.self;
+        return addHeapObject(ret);
+    });
+    imports.wbg.__wbg_window_ba85d88572adc0dc = handleError(function() {
+        var ret = window.window;
+        return addHeapObject(ret);
+    });
+    imports.wbg.__wbg_globalThis_b9277fc37e201fe5 = handleError(function() {
+        var ret = globalThis.globalThis;
+        return addHeapObject(ret);
+    });
+    imports.wbg.__wbg_global_e16303fe83e1d57f = handleError(function() {
+        var ret = global.global;
+        return addHeapObject(ret);
+    });
+    imports.wbg.__wbg_buffer_49131c283a06686f = function(arg0) {
+        var ret = getObject(arg0).buffer;
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbg_newwithbyteoffsetandlength_c0f38401daad5a22 = function(arg0, arg1, arg2) {
+        var ret = new Uint8Array(getObject(arg0), arg1 >>> 0, arg2 >>> 0);
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbg_length_2b13641a9d906653 = function(arg0) {
+        var ret = getObject(arg0).length;
+        return ret;
+    };
+    imports.wbg.__wbg_new_9b295d24cf1d706f = function(arg0) {
+        var ret = new Uint8Array(getObject(arg0));
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbg_set_3bb960a9975f3cd2 = function(arg0, arg1, arg2) {
+        getObject(arg0).set(getObject(arg1), arg2 >>> 0);
+    };
+    imports.wbg.__wbg_getRandomValues_f5e14ab7ac8e995d = function(arg0, arg1, arg2) {
+        getObject(arg0).getRandomValues(getArrayU8FromWasm0(arg1, arg2));
+    };
+    imports.wbg.__wbg_randomFillSync_d5bd2d655fdf256a = function(arg0, arg1, arg2) {
+        getObject(arg0).randomFillSync(getArrayU8FromWasm0(arg1, arg2));
+    };
+    imports.wbg.__wbg_self_1b7a39e3a92c949c = handleError(function() {
+        var ret = self.self;
+        return addHeapObject(ret);
+    });
+    imports.wbg.__wbg_require_604837428532a733 = function(arg0, arg1) {
+        var ret = require(getStringFromWasm0(arg0, arg1));
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbg_crypto_968f1772287e2df0 = function(arg0) {
+        var ret = getObject(arg0).crypto;
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbg_getRandomValues_a3d34b4fee3c2869 = function(arg0) {
+        var ret = getObject(arg0).getRandomValues;
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbindgen_debug_string = function(arg0, arg1) {
+        var ret = debugString(getObject(arg1));
+        var ptr0 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        getInt32Memory0()[arg0 / 4 + 1] = len0;
+        getInt32Memory0()[arg0 / 4 + 0] = ptr0;
+    };
+    imports.wbg.__wbindgen_throw = function(arg0, arg1) {
+        throw new Error(getStringFromWasm0(arg0, arg1));
+    };
+    imports.wbg.__wbindgen_memory = function() {
+        var ret = wasm.memory;
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbindgen_closure_wrapper83 = function(arg0, arg1, arg2) {
+        var ret = makeClosure(arg0, arg1, 33, __wbg_adapter_16);
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbindgen_closure_wrapper165 = function(arg0, arg1, arg2) {
+        var ret = makeMutClosure(arg0, arg1, 71, __wbg_adapter_19);
+        return addHeapObject(ret);
+    };
+
+    if (typeof input === 'string' || (typeof Request === 'function' && input instanceof Request) || (typeof URL === 'function' && input instanceof URL)) {
+        input = fetch(input);
+    }
+
+    const { instance, module } = await load(await input, imports);
+
+    wasm = instance.exports;
+    init.__wbindgen_wasm_module = module;
+    wasm.__wbindgen_start();
+    return wasm;
+}
+
+wasm_bindgen = Object.assign(init, __exports);
+
+})();
